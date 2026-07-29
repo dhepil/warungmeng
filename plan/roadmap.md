@@ -24,7 +24,7 @@ Port from SOURCE domain/business logic. No React, no adapters, no I/O.
 - [x] S2 `orders.ts` — order model + state transitions
 - [x] S3 `inventory.ts` — stock consume/reverse (idempotent)
 - [x] S4 `finance.ts` — money type, HPP/tax math
-- [ ] S5 `reporting.ts` — read-only aggregations
+- [x] S5 `reporting.ts` — read-only aggregations
 - [ ] S6 `index.ts` barrel + `domainRules.test.ts` (protected-behavior tests)
 - [ ] S7 (optional) domain tidy pass — reduce/clarify code with S6 tests green as the safety net. No behavior change; check must stay green. Skippable.
 Gate to done: all P1 `exact` files exist, tests + `npm run check` green.
@@ -81,3 +81,4 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 - P1 S2 done — orders.ts ported (types + status transitions consolidated), imports Money from ./catalog, checks green.
 - P1 S3 done — inventory.ts ported (types + unit conversion + stock math). HPP *functions* deferred to finance.ts (S4) per roadmap; recipe/HPP types kept here. Domain stock primitives only; idempotent consume/reverse belongs to admin-engine (P3). Checks green.
 - P1 S4 done — finance.ts ported (types + validation + ledger + calculations consolidated) plus HPP functions from inventory/hpp.ts. Imports Money/Order/inventory recipe types. Checks green.
+- P1 S5 done — reporting.ts ported (types + dashboard + reports consolidated). Read-only aggregations over ReportingSnapshot; imports from catalog/finance/inventory/orders. Checks green.
