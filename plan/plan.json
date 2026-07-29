@@ -1,0 +1,358 @@
+{
+  "$comment": "SINGLE SOURCE OF TRUTH for structure + import boundaries. Transcribed from new-target/*.md. Do NOT edit to make a build pass — new-target wins always. Checkers read this file; agents do not rely on memory.",
+  "version": 1,
+  "activePhase": null,
+  "phases": [
+    {
+      "id": "P1-domain",
+      "title": "Shared pure domain",
+      "package": "packages/domain",
+      "status": "pending",
+      "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/domain"
+    },
+    {
+      "id": "P2-module-system",
+      "title": "Generic module runtime",
+      "package": "packages/module-system",
+      "status": "pending",
+      "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/module-system"
+    },
+    {
+      "id": "P3-admin-engine",
+      "title": "Admin headless logic",
+      "package": "packages/admin-engine",
+      "status": "pending",
+      "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/admin-engine"
+    },
+    {
+      "id": "P4-storefront-engine",
+      "title": "Storefront headless logic",
+      "package": "packages/storefront-engine",
+      "status": "pending",
+      "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/storefront-engine"
+    },
+    {
+      "id": "P5-ui-core",
+      "title": "Single shared UI source",
+      "package": "packages/ui-core",
+      "status": "pending",
+      "source": "new-target/UI-TARGET-FILE-TREE.md §6 packages/ui-core"
+    },
+    {
+      "id": "P6-apps",
+      "title": "Admin + Storefront app shells (gates only)",
+      "package": "apps",
+      "status": "pending",
+      "source": "new-target/UI-TARGET-FILE-TREE.md §6 apps/"
+    }
+  ],
+  "$allowedFilesComment": "Per phase: glob patterns of files that ARE allowed to exist. A real product file matching NONE of the active/done phases' patterns is DRIFT. 'exact' = must exist eventually (missing = flagged when phase is done). 'allow' = permitted but optional. Root config files are always allowed via 'rootAllow'.",
+  "rootAllow": [
+    "package.json",
+    "package-lock.json",
+    "tsconfig.base.json",
+    ".gitignore",
+    ".prettierrc",
+    ".prettierignore",
+    "eslint.config.ts",
+    "vitest.config.ts",
+    "CLAUDE.md",
+    "README.md",
+    "plan/**",
+    "new-target/**",
+    ".claude/**",
+    "test/**",
+    "kill-ports.bat"
+  ],
+  "allowedFiles": {
+    "P1-domain": {
+      "exact": [
+        "packages/domain/package.json",
+        "packages/domain/tsconfig.json",
+        "packages/domain/src/index.ts",
+        "packages/domain/src/catalog.ts",
+        "packages/domain/src/orders.ts",
+        "packages/domain/src/inventory.ts",
+        "packages/domain/src/finance.ts",
+        "packages/domain/src/reporting.ts",
+        "packages/domain/src/domainRules.test.ts"
+      ],
+      "allow": []
+    },
+    "P2-module-system": {
+      "exact": [
+        "packages/module-system/package.json",
+        "packages/module-system/tsconfig.json",
+        "packages/module-system/src/index.ts",
+        "packages/module-system/src/engineContracts.ts",
+        "packages/module-system/src/engineRegistry.ts",
+        "packages/module-system/src/capabilityRegistry.ts",
+        "packages/module-system/src/dependencyGraph.ts",
+        "packages/module-system/src/discovery.ts",
+        "packages/module-system/src/diagnostics.ts",
+        "packages/module-system/src/operationResult.ts",
+        "packages/module-system/src/moduleSystem.test.ts"
+      ],
+      "allow": []
+    },
+    "P3-admin-engine": {
+      "exact": [
+        "packages/admin-engine/package.json",
+        "packages/admin-engine/tsconfig.json",
+        "packages/admin-engine/src/index.ts",
+        "packages/admin-engine/src/createAdminEngine.ts",
+        "packages/admin-engine/src/discoverAdminLogic.ts",
+        "packages/admin-engine/src/adminEngineContracts.ts",
+        "packages/admin-engine/src/adminEngineSnapshot.ts",
+        "packages/admin-engine/src/adminEngineGraph.test.ts",
+        "packages/admin-engine/src/shared/atomicOperationPort.ts"
+      ],
+      "allow": [
+        "packages/admin-engine/src/engines/*/*Engine.ts",
+        "packages/admin-engine/src/engines/*/*Contracts.ts",
+        "packages/admin-engine/src/engines/*/children/**/*Child.ts",
+        "packages/admin-engine/src/engines/*/children/**/*.test.ts",
+        "packages/admin-engine/src/engines/orders/children/order-cancellation/cancelOrderAtomically.ts",
+        "packages/admin-engine/src/engines/pos/children/checkout/submitPosCheckoutAtomically.ts"
+      ]
+    },
+    "P4-storefront-engine": {
+      "exact": [
+        "packages/storefront-engine/package.json",
+        "packages/storefront-engine/tsconfig.json",
+        "packages/storefront-engine/src/index.ts",
+        "packages/storefront-engine/src/createStorefrontEngine.ts",
+        "packages/storefront-engine/src/discoverStorefrontLogic.ts",
+        "packages/storefront-engine/src/storefrontEngineContracts.ts",
+        "packages/storefront-engine/src/storefrontEngineSnapshot.ts",
+        "packages/storefront-engine/src/storefrontEngineGraph.test.ts"
+      ],
+      "allow": [
+        "packages/storefront-engine/src/engines/*/*Engine.ts",
+        "packages/storefront-engine/src/engines/*/*Contracts.ts",
+        "packages/storefront-engine/src/engines/*/children/**/*Child.ts",
+        "packages/storefront-engine/src/engines/*/children/**/*.test.ts",
+        "packages/storefront-engine/src/engines/checkout/children/checkout-submission/submitCheckoutSafely.ts"
+      ]
+    },
+    "P5-ui-core": {
+      "exact": [
+        "packages/ui-core/package.json",
+        "packages/ui-core/tsconfig.json",
+        "packages/ui-core/src/index.ts",
+        "packages/ui-core/src/headless.ts",
+        "packages/ui-core/src/react.ts",
+        "packages/ui-core/src/headless/createUiCore.ts",
+        "packages/ui-core/src/headless/uiContracts.ts",
+        "packages/ui-core/src/headless/uiCoreSnapshot.ts",
+        "packages/ui-core/src/headless/layoutRegistry.ts",
+        "packages/ui-core/src/headless/gateRegistry.ts",
+        "packages/ui-core/src/headless/presentationState.ts",
+        "packages/ui-core/src/headless/uiCore.test.ts",
+        "packages/ui-core/src/headless/index.ts",
+        "packages/ui-core/src/layouts/OverviewLayout.tsx",
+        "packages/ui-core/src/layouts/CollectionLayout.tsx",
+        "packages/ui-core/src/layouts/EditorLayout.tsx",
+        "packages/ui-core/src/layouts/DetailLayout.tsx",
+        "packages/ui-core/src/layouts/WorkspaceLayout.tsx",
+        "packages/ui-core/src/layouts/SettingsLayout.tsx",
+        "packages/ui-core/src/layouts/FeedbackLayout.tsx",
+        "packages/ui-core/src/layouts/globalLayouts.test.tsx",
+        "packages/ui-core/src/widgets/DataWidgets.tsx",
+        "packages/ui-core/src/widgets/InputWidgets.tsx",
+        "packages/ui-core/src/widgets/FeedbackWidgets.tsx",
+        "packages/ui-core/src/widgets/globalWidgets.test.tsx",
+        "packages/ui-core/src/renderer/UiHost.tsx",
+        "packages/ui-core/src/renderer/AntdUiRenderer.tsx",
+        "packages/ui-core/src/renderer/SurfaceShell.tsx",
+        "packages/ui-core/src/renderer/NavigationRenderer.tsx",
+        "packages/ui-core/src/renderer/iconRegistry.tsx",
+        "packages/ui-core/src/renderer/renderer.test.tsx",
+        "packages/ui-core/src/theme/themeContracts.ts",
+        "packages/ui-core/src/theme/createAntdTheme.ts",
+        "packages/ui-core/src/theme/ThemeProvider.tsx",
+        "packages/ui-core/src/styles/uiCore.css"
+      ],
+      "allow": []
+    },
+    "P6-apps": {
+      "exact": [
+        "apps/admin/package.json",
+        "apps/admin/tsconfig.json",
+        "apps/admin/src/adminUiGates.test.ts",
+        "apps/admin/src/adminSurfaceProfile.ts",
+        "apps/admin/src/createAdminApplication.ts",
+        "apps/admin/src/App.tsx",
+        "apps/admin/src/main.tsx",
+        "apps/admin/src/ui-gates/dashboardUiGate.ts",
+        "apps/admin/src/ui-gates/menuUiGate.ts",
+        "apps/admin/src/ui-gates/financeUiGate.ts",
+        "apps/admin/src/ui-gates/inventoryUiGate.ts",
+        "apps/admin/src/ui-gates/posUiGate.ts",
+        "apps/admin/src/ui-gates/ordersUiGate.ts",
+        "apps/admin/src/ui-gates/settingsUiGate.ts",
+        "apps/storefront/package.json",
+        "apps/storefront/tsconfig.json",
+        "apps/storefront/src/storefrontUiGates.test.ts",
+        "apps/storefront/src/storefrontSurfaceProfile.ts",
+        "apps/storefront/src/createStorefrontApplication.ts",
+        "apps/storefront/src/App.tsx",
+        "apps/storefront/src/main.tsx",
+        "apps/storefront/src/ui-gates/catalogUiGate.ts",
+        "apps/storefront/src/ui-gates/cartUiGate.ts",
+        "apps/storefront/src/ui-gates/checkoutUiGate.ts",
+        "apps/storefront/src/ui-gates/ordersUiGate.ts"
+      ],
+      "allow": [
+        "apps/admin/index.html",
+        "apps/admin/vite.config.ts",
+        "apps/storefront/index.html",
+        "apps/storefront/vite.config.ts"
+      ]
+    }
+  },
+  "$forbiddenPathsComment": "Paths that must NEVER appear in the destination — these are the SOURCE (AntD) layout shapes. If code lands here, an agent copied instead of reorganized into new-target layout. This is the single most important guardrail for this port.",
+  "forbiddenPaths": [
+    "apps/*/src/features/**",
+    "apps/*/src/screens/**",
+    "apps/*/src/components/**",
+    "apps/*/src/views/**",
+    "apps/*/src/**/*.module.css",
+    "packages/ui-admin/**",
+    "packages/ui-storefront/**",
+    "packages/data/**"
+  ],
+  "$boundariesComment": "Import contracts transcribed from new-target LOGIC §11, UI §17, BACKEND §8. 'from' = glob of importing file's path. 'cannotImport' = specifier substrings/patterns forbidden in that file. Enforced by check-boundaries.mjs via TypeScript AST.",
+  "boundaries": [
+    {
+      "from": "packages/module-system/**",
+      "cannotImport": [
+        "react",
+        "react-dom",
+        "react-router",
+        "antd",
+        "@ant-design/",
+        ".css",
+        "packages/domain",
+        "@warungmeng/domain",
+        "admin-engine",
+        "storefront-engine",
+        "ui-core",
+        "apps/"
+      ],
+      "forbidBrowserRuntime": true,
+      "source": "LOGIC §11: module-system → TS stdlib only"
+    },
+    {
+      "from": "packages/domain/**",
+      "cannotImport": [
+        "react",
+        "react-dom",
+        "react-router",
+        "antd",
+        "@ant-design/",
+        ".css",
+        "admin-engine",
+        "storefront-engine",
+        "ui-core",
+        "apps/"
+      ],
+      "forbidBrowserRuntime": true,
+      "source": "LOGIC §11: domain → TS stdlib only; no app engine, no React, no adapter"
+    },
+    {
+      "from": "packages/admin-engine/**",
+      "cannotImport": [
+        "react",
+        "react-dom",
+        "react-router",
+        "antd",
+        "@ant-design/",
+        ".css",
+        "storefront-engine",
+        "@warungmeng/storefront",
+        "ui-core",
+        "@warungmeng/ui-core",
+        "apps/"
+      ],
+      "source": "LOGIC §11: admin-engine ✕ storefront-engine, ✕ ui-core, ✕ React/AntD"
+    },
+    {
+      "from": "packages/storefront-engine/**",
+      "cannotImport": [
+        "react",
+        "react-dom",
+        "react-router",
+        "antd",
+        "@ant-design/",
+        ".css",
+        "admin-engine",
+        "@warungmeng/admin",
+        "ui-core",
+        "@warungmeng/ui-core",
+        "apps/"
+      ],
+      "source": "LOGIC §11: storefront-engine ✕ admin-engine, ✕ ui-core, ✕ React/AntD"
+    },
+    {
+      "from": "packages/ui-core/src/headless/**",
+      "cannotImport": [
+        "react",
+        "react-dom",
+        "antd",
+        "@ant-design/",
+        ".css",
+        "admin-engine",
+        "storefront-engine",
+        "@warungmeng/admin",
+        "@warungmeng/storefront",
+        "../layouts/",
+        "../widgets/",
+        "../renderer/",
+        "../theme/"
+      ],
+      "source": "UI §7: headless must not import React/AntD/DOM/CSS or renderer/layout impl"
+    },
+    {
+      "from": "packages/ui-core/**",
+      "cannotImport": [
+        "admin-engine",
+        "storefront-engine",
+        "@warungmeng/admin-engine",
+        "@warungmeng/storefront-engine"
+      ],
+      "source": "UI §17: ui-core ✕ admin-engine, ✕ storefront-engine"
+    },
+    {
+      "from": "apps/admin/**",
+      "cannotImport": [
+        "storefront-engine",
+        "@warungmeng/storefront",
+        "apps/storefront"
+      ],
+      "source": "UI §17: Admin gate ✕ Storefront engine"
+    },
+    {
+      "from": "apps/storefront/**",
+      "cannotImport": [
+        "admin-engine",
+        "@warungmeng/admin",
+        "apps/admin"
+      ],
+      "source": "UI §17: Storefront gate ✕ Admin engine"
+    },
+    {
+      "from": "apps/*/src/ui-gates/**",
+      "cannotImport": [
+        "react",
+        "antd",
+        "@ant-design/",
+        ".css",
+        "/children/",
+        "repository",
+        "/engines/*/children/"
+      ],
+      "source": "UI §17: gate ✕ child internal, ✕ repository/adapter, ✕ React/AntD, ✕ CSS"
+    }
+  ]
+}

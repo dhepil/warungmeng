@@ -1,0 +1,22 @@
+{
+  "name": "warungmeng",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "check": "node plan/check.mjs",
+    "check:structure": "node plan/check-structure.mjs",
+    "check:boundaries": "node plan/check-boundaries.mjs",
+    "check:boundaries:selftest": "node plan/check-boundaries.mjs --self-test",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.0.0"
+  }
+}
