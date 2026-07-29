@@ -20,6 +20,11 @@ If you do nothing else, obey these rules.
    product code while the check is red. If it is red at the start, fix that first
    or report it — do not build on top of drift.
 
+   Also read `plan/roadmap.md` at the start — it holds the locked slice order and
+   the live progress checklist. `plan.json` says WHERE files go; `roadmap.md` says
+   in WHAT ORDER and HOW FAR we've gotten. Tick its box + append a progress note
+   whenever a slice or phase changes state.
+
 3. **One active phase at a time.** `plan/plan.json` has a `phases` list and an
    `activePhase` field. Work ONLY on the active phase's package. Phase order is
    locked: `P1-domain → P2-module-system → P3-admin-engine → P4-storefront-engine
