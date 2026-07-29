@@ -18,9 +18,9 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done & checks green
 ## P0 — Guardrail harness  `[x]`
 Committed. Baseline. No product code.
 
-## P1 — packages/domain (pure logic, TS stdlib only)  `[ ]`
+## P1 — packages/domain (pure logic, TS stdlib only)  `[~]`
 Port from SOURCE domain/business logic. No React, no adapters, no I/O.
-- [ ] S1 `catalog.ts` — products/menu, pricing primitives
+- [x] S1 `catalog.ts` — products/menu, pricing primitives
 - [ ] S2 `orders.ts` — order model + state transitions
 - [ ] S3 `inventory.ts` — stock consume/reverse (idempotent)
 - [ ] S4 `finance.ts` — money type, HPP/tax math
@@ -76,3 +76,4 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 ## Progress notes
 (latest at top — agent appends one line when a slice or phase changes state)
 - P0 done — harness committed, all checks green on empty repo.
+- P1 S1 done — catalog.ts ported (types + validation + variant rules consolidated), domain scaffold added, checks green, committed 0800e8f.
