@@ -33,7 +33,7 @@ Gate to done: all P1 `exact` files exist, tests + `npm run check` green.
 Engine host + capability wiring. No domain knowledge, no browser globals.
 - [x] S1 `operationResult.ts` + `engineContracts.ts` (types first)
 - [x] S2 `engineRegistry.ts` + `capabilityRegistry.ts`
-- [ ] S3 `dependencyGraph.ts` + `discovery.ts`
+- [x] S3 `dependencyGraph.ts` + `discovery.ts`
 - [ ] S4 `diagnostics.ts`
 - [ ] S5 `index.ts` + `moduleSystem.test.ts`
 
@@ -82,6 +82,7 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 - P1 S3 done — inventory.ts ported (types + unit conversion + stock math). HPP *functions* deferred to finance.ts (S4) per roadmap; recipe/HPP types kept here. Domain stock primitives only; idempotent consume/reverse belongs to admin-engine (P3). Checks green.
 - P1 S4 done — finance.ts ported (types + validation + ledger + calculations consolidated) plus HPP functions from inventory/hpp.ts. Imports Money/Order/inventory recipe types. Checks green.
 - P1 S5 done — reporting.ts ported (types + dashboard + reports consolidated). Read-only aggregations over ReportingSnapshot; imports from catalog/finance/inventory/orders. Checks green.
+- P2 S3 done — dependencyGraph.ts (startup order + duplicate/orphan/missing/cycle exclusion, deterministic) + discovery.ts (quarantines unknown candidates so nothing malformed reaches the registry). Edges derived from requires→provides since the target has no dependsOn. Dropped SOURCE's UI-field and surface validation. Verified 12 behaviors with a temporary suite (deleted; permanent tests are S5). Checks green, committed 4a02ae4.
 - P2 S2 done — capabilityRegistry.ts (staged scopes: a child's capabilities stay pending until it is fully created) + engineRegistry.ts (register/resolve/list/initialize/dispose, snapshot, subscribe). Consolidated from SOURCE's 7 registry/capability files, reshaped from its async extension model to the target's synchronous parent/child creation. Verified 8 behaviors with a temporary suite (deleted; permanent tests are S5) — it caught a real defect where a child could not dispose its own capability, now fixed. Checks green, committed 778b197.
 - P2 S1 done — module-system scaffold + operationResult.ts (one success/degraded/failure shape, replacing SOURCE's three near-identical result unions) + engineContracts.ts (identity brands, capability tokens, diagnostics, outbound ports, parent/child definitions, lifecycle + snapshot). Consolidated from SOURCE's 8 contracts/* files. Two deliberate departures per LOGIC §5/§11: dropped surface vocabulary (SOURCE hardcoded admin/storefront into the generic runtime) and dropped UI vocabulary (navigation/route/label/icon/component contributions). Phase 2 activated. Checks green, committed 60bd877.
 - P1 S6 done — index.ts barrel + domainRules.test.ts (17 protected-behavior tests). Installed minimal test toolchain (vitest, typescript, @types/node) — first deps in repo. Replaced structuredClone (needs DOM lib, breaks domain purity) with a pure JSON deep clone in finance.ts; added a test asserting deep-clone identity. typecheck + tests now run inside npm run check. ALL FOUR checks green. **P1-domain DONE.**
