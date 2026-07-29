@@ -29,9 +29,9 @@ Port from SOURCE domain/business logic. No React, no adapters, no I/O.
 - [ ] S7 (optional) domain tidy pass — reduce/clarify code with S6 tests green as the safety net. No behavior change; check must stay green. Skippable.
 Gate to done: all P1 `exact` files exist, tests + `npm run check` green.
 
-## P2 — packages/module-system (generic runtime, zero deps)  `[ ]`
+## P2 — packages/module-system (generic runtime, zero deps)  `[~]`
 Engine host + capability wiring. No domain knowledge, no browser globals.
-- [ ] S1 `operationResult.ts` + `engineContracts.ts` (types first)
+- [x] S1 `operationResult.ts` + `engineContracts.ts` (types first)
 - [ ] S2 `engineRegistry.ts` + `capabilityRegistry.ts`
 - [ ] S3 `dependencyGraph.ts` + `discovery.ts`
 - [ ] S4 `diagnostics.ts`
@@ -82,4 +82,5 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 - P1 S3 done — inventory.ts ported (types + unit conversion + stock math). HPP *functions* deferred to finance.ts (S4) per roadmap; recipe/HPP types kept here. Domain stock primitives only; idempotent consume/reverse belongs to admin-engine (P3). Checks green.
 - P1 S4 done — finance.ts ported (types + validation + ledger + calculations consolidated) plus HPP functions from inventory/hpp.ts. Imports Money/Order/inventory recipe types. Checks green.
 - P1 S5 done — reporting.ts ported (types + dashboard + reports consolidated). Read-only aggregations over ReportingSnapshot; imports from catalog/finance/inventory/orders. Checks green.
+- P2 S1 done — module-system scaffold + operationResult.ts (one success/degraded/failure shape, replacing SOURCE's three near-identical result unions) + engineContracts.ts (identity brands, capability tokens, diagnostics, outbound ports, parent/child definitions, lifecycle + snapshot). Consolidated from SOURCE's 8 contracts/* files. Two deliberate departures per LOGIC §5/§11: dropped surface vocabulary (SOURCE hardcoded admin/storefront into the generic runtime) and dropped UI vocabulary (navigation/route/label/icon/component contributions). Phase 2 activated. Checks green, committed 60bd877.
 - P1 S6 done — index.ts barrel + domainRules.test.ts (17 protected-behavior tests). Installed minimal test toolchain (vitest, typescript, @types/node) — first deps in repo. Replaced structuredClone (needs DOM lib, breaks domain purity) with a pure JSON deep clone in finance.ts; added a test asserting deep-clone identity. typecheck + tests now run inside npm run check. ALL FOUR checks green. **P1-domain DONE.**
