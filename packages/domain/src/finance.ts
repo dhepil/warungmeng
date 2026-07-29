@@ -238,6 +238,13 @@ function mapPaymentMethod(method: OrderPaymentMethod): FinancePaymentMethod {
   return method === "unknown" ? "other" : method;
 }
 
+// Deep clone of a finance transaction. FinanceTransaction is JSON-safe (strings, numbers,
+// null, nested Money/attachment — no Dates or functions), so a JSON round-trip is a
+// faithful deep clone and keeps the domain free of Node/DOM globals (structuredClone).
+function cloneFinanceTransaction(transaction: FinanceTransaction): FinanceTransaction {
+  return JSON.parse(JSON.stringify(transaction)) as FinanceTransaction;
+}
+
 function buildAutomaticTransaction(
   order: Order,
   type: Extract<FinanceTransactionType, "sale" | "refund">,
@@ -295,7 +302,7 @@ export function buildFinanceLedger(
   const transactionById = new Map<string, FinanceTransaction>();
 
   manualTransactions.forEach((transaction) => {
-    transactionById.set(transaction.id, structuredClone(transaction));
+    transactionById.set(transaction.id, cloneFinanceTransaction(transaction));
   });
   projectOrdersToFinanceTransactions(orders).forEach((transaction) => {
     transactionById.set(transaction.id, transaction);

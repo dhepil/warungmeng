@@ -18,14 +18,14 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done & checks green
 ## P0 — Guardrail harness  `[x]`
 Committed. Baseline. No product code.
 
-## P1 — packages/domain (pure logic, TS stdlib only)  `[~]`
+## P1 — packages/domain (pure logic, TS stdlib only)  `[x]`
 Port from SOURCE domain/business logic. No React, no adapters, no I/O.
 - [x] S1 `catalog.ts` — products/menu, pricing primitives
 - [x] S2 `orders.ts` — order model + state transitions
 - [x] S3 `inventory.ts` — stock consume/reverse (idempotent)
 - [x] S4 `finance.ts` — money type, HPP/tax math
 - [x] S5 `reporting.ts` — read-only aggregations
-- [ ] S6 `index.ts` barrel + `domainRules.test.ts` (protected-behavior tests)
+- [x] S6 `index.ts` barrel + `domainRules.test.ts` (protected-behavior tests)
 - [ ] S7 (optional) domain tidy pass — reduce/clarify code with S6 tests green as the safety net. No behavior change; check must stay green. Skippable.
 Gate to done: all P1 `exact` files exist, tests + `npm run check` green.
 
@@ -82,3 +82,4 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 - P1 S3 done — inventory.ts ported (types + unit conversion + stock math). HPP *functions* deferred to finance.ts (S4) per roadmap; recipe/HPP types kept here. Domain stock primitives only; idempotent consume/reverse belongs to admin-engine (P3). Checks green.
 - P1 S4 done — finance.ts ported (types + validation + ledger + calculations consolidated) plus HPP functions from inventory/hpp.ts. Imports Money/Order/inventory recipe types. Checks green.
 - P1 S5 done — reporting.ts ported (types + dashboard + reports consolidated). Read-only aggregations over ReportingSnapshot; imports from catalog/finance/inventory/orders. Checks green.
+- P1 S6 done — index.ts barrel + domainRules.test.ts (17 protected-behavior tests). Installed minimal test toolchain (vitest, typescript, @types/node) — first deps in repo. Replaced structuredClone (needs DOM lib, breaks domain purity) with a pure JSON deep clone in finance.ts; added a test asserting deep-clone identity. typecheck + tests now run inside npm run check. ALL FOUR checks green. **P1-domain DONE.**

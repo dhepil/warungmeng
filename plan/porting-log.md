@@ -28,3 +28,6 @@ YYYY-MM-DD | <phase> | <slice> | AntD: <source path> → dest: <destination path
 2026-07-29 | P1-domain | S3 inventory | AntD: packages/domain/src/inventory/{types,units,stock}.ts → dest: packages/domain/src/inventory.ts (hpp.ts deferred to finance S4) | check: green
 2026-07-29 | P1-domain | S4 finance | AntD: packages/domain/src/finance/{types,validation,ledger,calculations}.ts + inventory/hpp.ts → dest: packages/domain/src/finance.ts | check: green
 2026-07-29 | P1-domain | S5 reporting | AntD: packages/domain/src/reporting/{types,dashboard,reports}.ts → dest: packages/domain/src/reporting.ts | check: green
+2026-07-30 | P1-domain | S6 index+tests | AntD: catalog/orders/inventory/finance *.test.ts → dest: packages/domain/src/index.ts + domainRules.test.ts (17 tests) | check: green (structure+boundaries+typecheck+tests)
+2026-07-30 | P1-domain | S6 fix | structuredClone → pure JSON deep clone in finance.ts (domain purity: no DOM lib) | check: green
+2026-07-30 | P1-domain | PHASE DONE | all P1 exact files exist, 4/4 checks green, status flipped to done
