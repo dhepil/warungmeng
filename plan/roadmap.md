@@ -21,11 +21,12 @@ Committed. Baseline. No product code.
 ## P1 — packages/domain (pure logic, TS stdlib only)  `[~]`
 Port from SOURCE domain/business logic. No React, no adapters, no I/O.
 - [x] S1 `catalog.ts` — products/menu, pricing primitives
-- [ ] S2 `orders.ts` — order model + state transitions
+- [x] S2 `orders.ts` — order model + state transitions
 - [ ] S3 `inventory.ts` — stock consume/reverse (idempotent)
 - [ ] S4 `finance.ts` — money type, HPP/tax math
 - [ ] S5 `reporting.ts` — read-only aggregations
 - [ ] S6 `index.ts` barrel + `domainRules.test.ts` (protected-behavior tests)
+- [ ] S7 (optional) domain tidy pass — reduce/clarify code with S6 tests green as the safety net. No behavior change; check must stay green. Skippable.
 Gate to done: all P1 `exact` files exist, tests + `npm run check` green.
 
 ## P2 — packages/module-system (generic runtime, zero deps)  `[ ]`
@@ -77,3 +78,4 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 (latest at top — agent appends one line when a slice or phase changes state)
 - P0 done — harness committed, all checks green on empty repo.
 - P1 S1 done — catalog.ts ported (types + validation + variant rules consolidated), domain scaffold added, checks green, committed 0800e8f.
+- P1 S2 done — orders.ts ported (types + status transitions consolidated), imports Money from ./catalog, checks green.

@@ -24,3 +24,4 @@ YYYY-MM-DD | <phase> | <slice> | AntD: <source path> → dest: <destination path
 ## Phase 1+ — Port slices (append below as they happen)
 
 2026-07-29 | P1-domain | S1 catalog | AntD: packages/domain/src/catalog/{types,validation,variantSelectionRule}.ts → dest: packages/domain/src/catalog.ts (+ package.json, tsconfig.json) | check: green
+2026-07-29 | P1-domain | S2 orders | AntD: packages/domain/src/orders/{types,transitions}.ts → dest: packages/domain/src/orders.ts | check: green
