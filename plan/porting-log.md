@@ -26,3 +26,4 @@ YYYY-MM-DD | <phase> | <slice> | AntD: <source path> → dest: <destination path
 2026-07-29 | P1-domain | S1 catalog | AntD: packages/domain/src/catalog/{types,validation,variantSelectionRule}.ts → dest: packages/domain/src/catalog.ts (+ package.json, tsconfig.json) | check: green
 2026-07-29 | P1-domain | S2 orders | AntD: packages/domain/src/orders/{types,transitions}.ts → dest: packages/domain/src/orders.ts | check: green
 2026-07-29 | P1-domain | S3 inventory | AntD: packages/domain/src/inventory/{types,units,stock}.ts → dest: packages/domain/src/inventory.ts (hpp.ts deferred to finance S4) | check: green
+2026-07-29 | P1-domain | S4 finance | AntD: packages/domain/src/finance/{types,validation,ledger,calculations}.ts + inventory/hpp.ts → dest: packages/domain/src/finance.ts | check: green
