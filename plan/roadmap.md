@@ -22,7 +22,7 @@ Committed. Baseline. No product code.
 Port from SOURCE domain/business logic. No React, no adapters, no I/O.
 - [x] S1 `catalog.ts` — products/menu, pricing primitives
 - [x] S2 `orders.ts` — order model + state transitions
-- [ ] S3 `inventory.ts` — stock consume/reverse (idempotent)
+- [x] S3 `inventory.ts` — stock consume/reverse (idempotent)
 - [ ] S4 `finance.ts` — money type, HPP/tax math
 - [ ] S5 `reporting.ts` — read-only aggregations
 - [ ] S6 `index.ts` barrel + `domainRules.test.ts` (protected-behavior tests)
@@ -79,3 +79,4 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 - P0 done — harness committed, all checks green on empty repo.
 - P1 S1 done — catalog.ts ported (types + validation + variant rules consolidated), domain scaffold added, checks green, committed 0800e8f.
 - P1 S2 done — orders.ts ported (types + status transitions consolidated), imports Money from ./catalog, checks green.
+- P1 S3 done — inventory.ts ported (types + unit conversion + stock math). HPP *functions* deferred to finance.ts (S4) per roadmap; recipe/HPP types kept here. Domain stock primitives only; idempotent consume/reverse belongs to admin-engine (P3). Checks green.
