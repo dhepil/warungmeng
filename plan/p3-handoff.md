@@ -232,9 +232,12 @@ as `roadmap.md` requires.
   shared-helper slot inside an area; `packages/domain` is a closed phase. The
   alternatives were cross-sibling imports (forbidden by the pattern) or three
   copies of the invariants (how SOURCE got four low-stock rules). It stays pure —
-  no store, no I/O — and calls the domain for all arithmetic. **Open question for
-  the owner, tech-debt D10:** whether `plan.json` should gain a real slot before
-  S5 builds on this.
+  no store, no I/O — and calls the domain for all arithmetic. **Tech-debt D10,
+  DEFERRED to the end of P3 by the owner on 2026-07-31:** whether `plan.json`
+  should gain a real slot for this. It blocks nothing, so S5 onward just import it.
+  Raise it at the phase-gate slice (13), when all seven areas exist and we can see
+  whether other areas hit the same need. Do not ask the owner again before then,
+  and do not move it on your own — only the owner may widen `plan.json`.
 - **Decide, then write. Never write, then validate.** `planStockMovement` returns
   a complete `StockMovementCommit` — ledger row, balance row, and cost row — and
   the store persists all three through one `commitMovement`. SOURCE's

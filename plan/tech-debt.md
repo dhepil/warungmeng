@@ -174,7 +174,9 @@ had something more valuable to do. Skippable indefinitely.
 
 ## D10 — The shared write primitive lives in a contracts file · `open`
 
-**Found:** P3 S4 (inventory part one). **Owner asked to decide.**
+**Found:** P3 S4 (inventory part one). **Owner decision, deferred to the end of
+P3 by the owner on 2026-07-31.** Do not ask again before then; do not act on it
+alone either.
 
 `planStockMovement`, `roundEntered` and `recomputeAverageUnitCost` are behavior,
 and they sit in `engines/inventory/inventoryContracts.ts`, which every other area
@@ -201,7 +203,21 @@ that "contracts hold no behavior" is not quite true, and the next agent may eith
 copy the exception where it is not needed or try to tidy it away and break S5. The
 file says at length why it is there, which mitigates but does not remove this.
 
-**Decide before S5**, since consumption and reversal will import it.
+**Why it is deferred, and to when.** It blocks nothing: the code works, is tested,
+and explains itself where it sits. The owner cannot judge it cold, and by the end
+of P3 the evidence needed to judge it will exist — all seven areas will have been
+built, so we will know whether "two children of one area must share a rule" is an
+inventory quirk or a gap in the plan. If several areas hit it, the plan needs a
+real slot and the answer is obvious. If inventory is the only one, leaving the
+exception alone is clearly right. The decision makes itself at that point.
+
+**The cost of waiting**, stated honestly: S5 will import this, and so will any
+later area that writes stock. Moving it at the end of P3 means updating several
+importers rather than one. That is a bigger edit but not a harder one, and it buys
+a decision made on evidence instead of a guess.
+
+**Revisit at:** the end of P3, together with the phase-gate slice (13). Whoever
+does that slice should raise it — by then it is a five-minute decision.
 
 ---
 
@@ -272,9 +288,13 @@ not a change to `stock-adjustment`.
 
 ---
 
-## D14 — The movement query cannot filter by `referenceId` · `open`
+## D14 — The movement query cannot filter by `referenceId` · `scheduled`
 
-**Found:** P3 S4, while defining `MovementStoreQuery`. **S5 will hit this.**
+**Found:** P3 S4, while defining `MovementStoreQuery`. **Scheduled for S5. No
+owner decision needed** — this was mis-filed as one. It is not a choice between
+designs; it is a lookup the next slice needs and the port does not yet allow. One
+optional field, inside the area S5 is already building, with the plainly correct
+shape. S5 adds it and records that it did.
 
 `referenceId` is a public field on every movement and is what SOURCE's idempotency
 check keys on — consumption bails if a `consumption` row already exists for an
@@ -284,10 +304,12 @@ scanning the full movement array in memory. The port faithfully reproduces that
 gap: you can read `referenceId` on a returned row, you cannot query by it.
 
 **Why it was left:** adding it in S4 would have been speculative — no S4 child
-needs it. It is recorded here so S5 does not rediscover it as a surprise.
+needs it, and a port method nobody calls invites an adapter to implement dead
+surface. Recorded so S5 does not rediscover it as a surprise.
 
-**What it costs to fix:** one optional field on `MovementStoreQuery` and its use
-in the two S5 children. Do it in S5, where the requirement is real.
+**What S5 does:** add `referenceId?: string` to `MovementStoreQuery`, use it in the
+consumption and reversal idempotency checks, and delete this entry on the way out
+(a resolved item belongs in `porting-log.md`, per the top of this file).
 
 **What it costs to leave:** the idempotency check is a linear scan of every
 movement ever recorded, on every checkout.
