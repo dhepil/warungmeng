@@ -307,3 +307,80 @@ the engine now rejects a negative adjustment explicitly with a named issue rathe
 than by accident. If discount options are actually wanted, that is a feature
 request, not debt — and it starts in `packages/domain`, whose validator is the thing
 forbidding them.
+
+---
+
+## D15 — The dashboard reaches into inventory's store shape, not its capability · `open`
+
+**Found:** P3 S4, from the scout's sweep for second consumers. **Decide by S11.**
+
+SOURCE's dashboard declares its own `Pick<InventoryRepository, "listIngredients" |
+"listStockBalances" | "listMovements" | "listRecipes" | "calculateHpp">` inside the
+dashboard feature — a structural slice of the inventory *repository*, not the
+inventory feature's own read capability. So two competing definitions of
+"inventory read" overlap on five methods, and neither knows about the other. Its
+loader also calls `listIngredients()` with no query at all, so it includes archived
+ingredients and relies on downstream status filters.
+
+**Why it is not fixed yet:** the dashboard is slice 11 and does not exist here yet.
+S4 did the part it could — `materials-read` and `stock-movements` publish plain
+`listIngredients` / `listSuppliers` / `listStockBalances` / `listMovements`
+returning raw domain entities precisely so the dashboard has a real capability to
+come through, which is why those methods exist alongside the joined list queries.
+LOGIC §8 confirms the intent: `admin.dashboard.overview` requires
+`admin.inventory.materials-read`, and `admin.dashboard.reports` requires
+`admin.inventory.stock-movements`.
+
+**What it costs to fix:** nothing extra, if slice 11 resolves the two capabilities
+instead of re-deriving a store shape. The debt is only that nothing yet *forces*
+it — an agent building the dashboard could reintroduce a structural Pick and every
+check would stay green.
+
+**What it costs to leave:** two definitions of the same read surface drift, and the
+boundary rule "a gate must not import a repository" is satisfied in letter while
+being violated in spirit.
+
+**Action for S11:** resolve the capabilities. Do not declare a structural type over
+`InventoryStorePort`.
+
+---
+
+## D16 — Recipes are read through the port but nothing owns them yet · `open`
+
+**Found:** P3 S4, while defining `InventoryStorePort`.
+
+`listRecipes` and `saveRecipe` exist in SOURCE's repository and are consumed by
+HPP and by the dashboard, but `InventoryStorePort` as written in S4 does not carry
+them — S4's three children have no use for them, and adding unused methods to a
+port invites an adapter to implement something nobody calls.
+
+**Why it was left:** speculative port surface is its own kind of drift. S5 builds
+`hpp-calculation`, which genuinely needs recipe reads, and that is the slice that
+should add them.
+
+**What it costs to fix:** two methods on the port in S5, where the requirement is
+real. Recorded here only so S5 does not treat their absence as an oversight.
+
+**Related:** D14, the same shape of deliberate gap.
+
+---
+
+## D17 — `package-lock.json` carries an unexplained uncommitted change · `open`
+
+**Found:** P3 S4, present at session start and untouched throughout.
+
+The working tree has `package-lock.json` modified — 3 lines added, 56 removed,
+dropping some optional/peer `@emnapi/*` entries. It predates this slice; no S4
+commit includes it, and all four checks are green with it in place.
+
+**Why it was left:** it is not product code and it is not this slice's work.
+Folding an unexplained dependency-graph change into a feature commit would make
+that commit describe something it did not do.
+
+**What it costs to fix:** either commit it on its own once someone can say what
+produced it (most likely an `npm install` on a different Node or platform), or
+`git checkout package-lock.json` to discard it. Both are one command; the decision
+is which.
+
+**What it costs to leave:** every future session starts with a dirty tree, so
+"working tree clean" stops being a usable signal that nothing unexpected happened.

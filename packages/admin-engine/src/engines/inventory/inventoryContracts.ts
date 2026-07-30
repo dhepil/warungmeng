@@ -76,22 +76,6 @@ export const MINIMUM_STOCK_FLOOR = 0;
 /** SOURCE: `min: 0` on the initial-cost and unit-cost inputs. */
 export const UNIT_COST_FLOOR = 0;
 
-/**
- * The movement types that reduce stock, and therefore the ones a caller may
- * record as an outbound adjustment.
- *
- * The domain owns the sign of a movement (`calculateMovementBaseDelta`). This
- * list exists only so the write child can name which types belong to a manual
- * adjustment versus the automated ones, and it is derived from the domain's own
- * type union rather than restated as strings.
- */
-export const MANUAL_MOVEMENT_TYPES: readonly InventoryMovementType[] = [
-  "purchase",
-  "adjustment-in",
-  "adjustment-out",
-  "waste",
-];
-
 // ─── Persistence port ────────────────────────────────────────────────────────
 
 /** `Omit<T, "id">` — the store assigns the id, as in the Menu area. */
