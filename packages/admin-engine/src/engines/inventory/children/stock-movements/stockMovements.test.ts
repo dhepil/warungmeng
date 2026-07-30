@@ -100,7 +100,9 @@ function storeOver(seed: {
     listSuppliers: async () => [],
     listStockBalances: async () => [],
     listMovements: async () => seed.movements ?? [],
+    listRecipes: async () => [],
     commitMovement: unsupported,
+    commitMovements: unsupported,
     newId: (kind) => `${kind}-test`,
   };
 }

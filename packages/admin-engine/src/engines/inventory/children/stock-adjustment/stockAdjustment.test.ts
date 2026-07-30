@@ -90,7 +90,12 @@ function plan(
   subject: InventoryIngredient | null,
   current: InventoryStockBalance | null = null,
 ) {
-  return planStockMovement({ ...input, referenceId: null }, subject, current, "mv-1");
+  return planStockMovement(
+    { ...input, quantitySource: "entered", referenceId: null },
+    subject,
+    current,
+    "mv-1",
+  );
 }
 
 /** A recording store that captures what it was asked to write. */
@@ -132,11 +137,18 @@ function storeOver(seed: {
         (entry) => outletId === undefined || entry.outletId === outletId,
       ),
     listMovements: async () => [],
+    listRecipes: async () => [],
     commitMovement: async (commit) => {
       if (seed.failCommit === true) {
         throw new Error("commit rejected");
       }
       commits.push(commit);
+    },
+    commitMovements: async (batch) => {
+      if (seed.failCommit === true) {
+        throw new Error("commit rejected");
+      }
+      commits.push(...batch);
     },
     newId: (kind) => `${kind}-test`,
   };

@@ -24,7 +24,9 @@ import type {
   InventoryStockBalance,
   InventorySupplier,
   InventoryUnit,
+  MenuRecipe,
   Money,
+  Order,
 } from "@warungmeng/domain";
 import {
   applyStockDelta,
@@ -177,8 +179,34 @@ export interface InventoryStorePort {
   listStockBalances(outletId?: string): Promise<readonly InventoryStockBalance[]>;
   listMovements(query?: MovementStoreQuery): Promise<readonly InventoryMovement[]>;
 
+  /**
+   * Recipes, added in S5 for `hpp-calculation` (tech-debt D16).
+   *
+   * Read-only on purpose. SOURCE also had `saveRecipe`, but recipe *editing* is a
+   * P5 screen concern with no child in LOGIC §8 owning it, and a port method
+   * nobody calls invites an adapter to implement dead surface. Whoever builds the
+   * recipe editor adds the write method then.
+   */
+  listRecipes(): Promise<readonly MenuRecipe[]>;
+
   /** Persists a decided movement — ledger row, balance, and cost — together. */
   commitMovement(commit: StockMovementCommit): Promise<void>;
+
+  /**
+   * Persists several decided movements together, added in S5.
+   *
+   * Consumption and reversal each write one row per recipe component, and those
+   * rows are one accounting event: a half-consumed order is a worse state than a
+   * refused one. SOURCE wrote them in a loop of single writes, so a failure
+   * partway left stock decremented with no way to finish — and its own guard then
+   * latched on the partial set and returned it forever.
+   *
+   * This does NOT make the batch atomic by itself; only an adapter can promise
+   * that. It makes the batch *expressible*, so the atomic port (LOGIC §10) that
+   * POS checkout and order cancellation own can wrap one call instead of N. An
+   * adapter that cannot commit all of them must reject and write none.
+   */
+  commitMovements(commits: readonly StockMovementCommit[]): Promise<void>;
 
   newId(kind: InventoryIdKind): string;
 }
@@ -199,6 +227,14 @@ export interface MovementStoreQuery {
   readonly ingredientId?: string;
   readonly outletId?: string;
   readonly type?: InventoryMovementType;
+  /**
+   * Added in S5, closing tech-debt D14. The automated paths identify their own
+   * rows by the order that caused them, so idempotency is a query, not a scan.
+   * SOURCE had the field on every movement and even displayed it, but left it off
+   * the query — so its guards filtered the entire movement array in memory on
+   * every checkout.
+   */
+  readonly referenceId?: string;
 }
 
 /**
@@ -392,12 +428,36 @@ export const STOCK_MOVEMENTS = createCapabilityToken<StockMovements>(STOCK_MOVEM
 // `plan/tech-debt.md` so the owner can decide whether a shared slot belongs in
 // `plan.json` before S5 builds on it.
 
+/**
+ * Where a movement's quantity came from, which decides which rules apply to it.
+ *
+ * This distinction is load-bearing and was invisible in SOURCE. Two of the rules
+ * lifted out of the movement form — the 0.01 minimum and two-decimal rounding —
+ * are rules about what a PERSON may type, and SOURCE only ever applied them
+ * there. A consumption quantity is computed
+ * (`component.quantity × item.quantity × (1 + waste/100)`) and can legitimately
+ * be very small or carry many decimals; applying the typed-entry rules to it
+ * would refuse orders the old app accepted and silently round recipe maths.
+ *
+ * So one primitive, with the difference stated rather than assumed:
+ *   - `entered` — rounded to `INVENTORY_DECIMAL_PLACES`, then must be at least
+ *     `MOVEMENT_QUANTITY_MINIMUM`.
+ *   - `derived` — not rounded, and only has to be finite and above zero. A
+ *     zero-quantity row would change no stock and is noise in an audit ledger.
+ *
+ * Every other invariant — the ingredient exists and is active, the unit
+ * converts, a purchase carries a cost, the balance may not go negative — applies
+ * identically to both, which is the whole reason there is one primitive.
+ */
+export type QuantitySource = "entered" | "derived";
+
 /** What a caller supplies to record a movement. Ids and derived values are not theirs to set. */
 export interface StockMovementDraftInput {
   readonly ingredientId: string;
   readonly outletId: string;
   readonly type: InventoryMovementType;
   readonly quantity: number;
+  readonly quantitySource: QuantitySource;
   readonly unit: InventoryUnit;
   readonly unitCost: Money | null;
   readonly referenceId: string | null;
@@ -545,15 +605,21 @@ export function planStockMovement(
     ]);
   }
 
-  const quantity = roundEntered(input.quantity);
+  // See `QuantitySource`: the rounding and the floor are rules about what a
+  // person may type, not about what recipe arithmetic may produce.
+  const entered = input.quantitySource === "entered";
+  const quantity = entered ? roundEntered(input.quantity) : input.quantity;
+  const minimum = entered ? MOVEMENT_QUANTITY_MINIMUM : 0;
 
-  if (quantity < MOVEMENT_QUANTITY_MINIMUM) {
+  if (quantity < minimum || quantity === 0) {
     return operationFailure("invalid-input", [
       operationIssue(
         MOVEMENT_ISSUE.quantityTooSmall,
-        `A movement must move at least ${MOVEMENT_QUANTITY_MINIMUM} ${input.unit}.`,
+        entered
+          ? `A movement must move at least ${MOVEMENT_QUANTITY_MINIMUM} ${input.unit}.`
+          : "A movement must move a quantity greater than zero.",
         ingredient.id,
-        { quantity, minimum: MOVEMENT_QUANTITY_MINIMUM },
+        { quantity, minimum },
       ),
     ]);
   }
@@ -717,3 +783,82 @@ export interface StockAdjustment {
 export const STOCK_ADJUSTMENT_ID = "admin.inventory.stock-adjustment";
 
 export const STOCK_ADJUSTMENT = createCapabilityToken<StockAdjustment>(STOCK_ADJUSTMENT_ID);
+
+// ─── Automated write contracts (children: stock-consumption, stock-reversal) ──
+
+/**
+ * Why an order's stock could not be consumed, or could not be reversed.
+ *
+ * Named codes rather than one opaque failure, because the callers act
+ * differently on each: POS checkout retries a transient store failure but must
+ * not retry an archived ingredient, and order cancellation has to tell the user
+ * whether the stock came back.
+ */
+export const CONSUMPTION_ISSUE = {
+  /** A menu item in the order has no recipe, so nothing was consumed for it. */
+  noRecipe: "menu-item-has-no-recipe",
+  /** The order consumed nothing at all — every item lacked a recipe. */
+  nothingToConsume: "order-consumes-nothing",
+  /** Already consumed. Carries the existing rows; not an error. */
+  alreadyConsumed: "order-already-consumed",
+  /** Nothing was ever consumed for this order, so there is nothing to reverse. */
+  neverConsumed: "order-never-consumed",
+  /** Already reversed. Carries the existing rows; not an error. */
+  alreadyReversed: "order-already-reversed",
+} as const;
+
+/**
+ * The outcome of consuming or reversing an order's stock.
+ *
+ * `movements` is what exists in the ledger for this order afterwards — freshly
+ * written rows, or the rows a replay found. `replayed` distinguishes those two,
+ * which SOURCE could not: its guard returned the existing rows and the caller had
+ * no way to tell a real write from a no-op, so a retry reported success for an
+ * order it had not actually finished.
+ *
+ * `skippedMenuItemIds` names order items that consumed nothing because they have
+ * no recipe. SOURCE skipped them in silence, which is how an order of entirely
+ * recipe-less items recorded zero rows — and then, because the idempotency guard
+ * keys on rows existing, never latched, so every retry re-ran it.
+ */
+export interface StockLedgerOutcome {
+  readonly movements: readonly InventoryMovement[];
+  readonly replayed: boolean;
+  readonly skippedMenuItemIds: readonly string[];
+}
+
+/**
+ * Consuming an order's ingredients (capability `admin.inventory.stock-consumption`,
+ * required by `admin.pos.checkout` per LOGIC §8).
+ *
+ * Idempotent by `(order.id, "consumption")`, as in SOURCE — but the result says so
+ * rather than hiding it.
+ *
+ * NOT atomic by itself, deliberately: LOGIC §10 gives the atomic boundary to POS
+ * checkout, which owns the whole multi-owner workflow. This child plans every row
+ * before writing any, and writes them through one `commitMovements`, so the
+ * caller's transaction has a single call to wrap.
+ */
+export interface StockConsumption {
+  consumeOrder(order: Order): Promise<OperationResult<StockLedgerOutcome>>;
+}
+
+export const STOCK_CONSUMPTION_ID = "admin.inventory.stock-consumption";
+
+export const STOCK_CONSUMPTION = createCapabilityToken<StockConsumption>(STOCK_CONSUMPTION_ID);
+
+/**
+ * Returning an order's ingredients to stock (capability
+ * `admin.inventory.stock-reversal`, required by `admin.orders.order-cancellation`
+ * per LOGIC §8).
+ *
+ * Guarded both ways: an order that never consumed cannot be reversed, and one
+ * already reversed is reported as a replay rather than reversed twice.
+ */
+export interface StockReversal {
+  revertOrderConsumption(order: Order): Promise<OperationResult<StockLedgerOutcome>>;
+}
+
+export const STOCK_REVERSAL_ID = "admin.inventory.stock-reversal";
+
+export const STOCK_REVERSAL = createCapabilityToken<StockReversal>(STOCK_REVERSAL_ID);

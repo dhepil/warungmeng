@@ -158,7 +158,9 @@ function stockAdjustmentOverStore(store: InventoryStorePort): StockAdjustment {
         ]);
 
         plan = planStockMovement(
-          { ...input, referenceId: null },
+          // A person typed this quantity, so the form's rounding and 0.01 floor
+          // apply. Consumption passes "derived" instead — see `QuantitySource`.
+          { ...input, quantitySource: "entered", referenceId: null },
           ingredient,
           balances.find(
             (balance) =>
