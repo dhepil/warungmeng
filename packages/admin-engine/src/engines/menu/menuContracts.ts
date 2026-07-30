@@ -22,6 +22,7 @@ import type {
   MenuItem,
   MenuVariantGroup,
   SalesInterval,
+  VariantSelectionMode,
   Weekday,
 } from "@warungmeng/domain";
 import type { OperationResult } from "@warungmeng/module-system";
@@ -331,3 +332,111 @@ export interface MenuEditor {
 export const MENU_EDITOR_ID = "admin.menu.menu-editor";
 
 export const MENU_EDITOR = createCapabilityToken<MenuEditor>(MENU_EDITOR_ID);
+
+// ─── Variant contracts (child: variant-management) ───────────────────────────
+
+export const VARIANT_GROUP_NAME_MAX_LENGTH = 80;
+export const VARIANT_OPTION_NAME_MAX_LENGTH = 80;
+
+/** A variant option flattened for editing, like `MenuEditorValues` for a menu. */
+export interface VariantOptionValues {
+  readonly id: string;
+  readonly name: string;
+  readonly priceAmount: number;
+  readonly available: boolean;
+}
+
+/**
+ * A variant group being edited, including the menus it is attached to.
+ *
+ * The selection rule is carried as a mode plus optional bounds rather than as
+ * the domain's `{ minSelections, maxSelections }`: "pick exactly two" and "pick
+ * at least two" are the same numbers with different meanings, and the mode is
+ * what an editor changes. The domain owns the conversion in both directions.
+ */
+export interface VariantGroupValues {
+  readonly name: string;
+  readonly description: string;
+  readonly visible: boolean;
+  readonly connectedMenuIds: readonly string[];
+  readonly options: readonly VariantOptionValues[];
+  readonly selectionMode: VariantSelectionMode;
+  readonly selectionMinimum?: number;
+  readonly selectionMaximum?: number;
+}
+
+export interface VariantGroupDraft {
+  readonly baseline: MenuVariantGroup | null;
+  readonly values: VariantGroupValues;
+  /** Every menu, so a caller can offer the full attach list. */
+  readonly menus: readonly MenuItem[];
+}
+
+export interface SaveVariantGroupInput {
+  readonly variantGroupId: string | null;
+  readonly values: VariantGroupValues;
+}
+
+/** The two fields the list edits in place, without opening the full editor. */
+export interface VariantOptionQuickEdit {
+  readonly name: string;
+  readonly priceAmount: number;
+}
+
+/**
+ * Which menus failed to attach or detach after a group was saved.
+ *
+ * Saving a group is two steps — write the group, then update each menu's
+ * `variantGroupIds` — and they are not atomic. SOURCE threw on the first menu
+ * that failed, leaving the rest unattempted and the group already written, and
+ * surfaced one generic error. This makes that partial outcome legible instead:
+ * the save reports `degraded` and names exactly which menus are out of sync, so
+ * a caller can retry those rather than guess.
+ *
+ * Deliberately NOT made atomic. The atomic port (LOGIC §10) is reserved for the
+ * two multi-owner workflows — order cancellation and POS checkout — and this is
+ * one owner writing several of its own rows. Promoting it would widen a
+ * guarantee the target scopes narrowly.
+ */
+export interface VariantGroupSaveResult {
+  readonly group: MenuVariantGroup;
+  readonly failedMenuIds: readonly string[];
+}
+
+/**
+ * Managing variant groups, their options, and which menus they attach to.
+ *
+ * The list's in-place option edits live here rather than in `menu-editor`
+ * because they write a variant group, and a group's selection rule has to stay
+ * satisfiable after every one of them.
+ */
+export interface VariantManagement {
+  startVariantGroupDraft(): Promise<OperationResult<VariantGroupDraft>>;
+  loadVariantGroupDraft(variantGroupId: string): Promise<OperationResult<VariantGroupDraft>>;
+  saveVariantGroup(
+    input: SaveVariantGroupInput,
+  ): Promise<OperationResult<VariantGroupSaveResult>>;
+  deleteVariantGroup(variantGroupId: string): Promise<OperationResult<string>>;
+  updateVariantOption(
+    variantGroupId: string,
+    optionId: string,
+    edit: VariantOptionQuickEdit,
+  ): Promise<OperationResult<MenuVariantGroup>>;
+  setVariantOptionAvailability(
+    variantGroupId: string,
+    optionId: string,
+    available: boolean,
+  ): Promise<OperationResult<MenuVariantGroup>>;
+  /**
+   * Refuses when removing the option would leave the group's selection rule
+   * unsatisfiable — including removing the last option.
+   */
+  deleteVariantOption(
+    variantGroupId: string,
+    optionId: string,
+  ): Promise<OperationResult<MenuVariantGroup>>;
+}
+
+export const VARIANT_MANAGEMENT_ID = "admin.menu.variant-management";
+
+export const VARIANT_MANAGEMENT = createCapabilityToken<VariantManagement>(VARIANT_MANAGEMENT_ID);
