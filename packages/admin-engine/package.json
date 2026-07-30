@@ -1,0 +1,16 @@
+{
+  "name": "@warungmeng/admin-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@warungmeng/domain": "0.1.0",
+    "@warungmeng/module-system": "0.1.0"
+  }
+}
