@@ -17,6 +17,7 @@
 
 import type {
   ApplicationEngineSnapshot,
+  Diagnostic,
   DiagnosticSink,
   LogicChildDefinition,
   OutboundPortRegistry,
@@ -54,6 +55,13 @@ export type AdminArea = (typeof ADMIN_AREAS)[number];
 export interface AdminLogicDefinitions {
   readonly engines: readonly ParentEngineDefinition[];
   readonly children: readonly LogicChildDefinition[];
+  /**
+   * What discovery threw away and why: a malformed file, an unsupported version,
+   * or a definition belonging to another runtime. Carried rather than dropped
+   * because a rejected file is invisible otherwise — it is not in `engines`, not
+   * in `children`, and produces no failure. Silence would be the worst outcome.
+   */
+  readonly diagnostics?: readonly Diagnostic[];
 }
 
 /**
@@ -103,6 +111,19 @@ export interface AdminEngineSnapshot {
   readonly areas: readonly AdminAreaSnapshot[];
   /** Areas expected by ADMIN_AREAS that discovery did not produce at all. */
   readonly missingAreas: readonly AdminArea[];
+  /**
+   * Every startup problem from all three stages — discovery, graph, registry —
+   * merged and de-duplicated.
+   *
+   * This exists because `runtime.diagnostics` only holds what the REGISTRY
+   * reported; a file rejected during discovery or a child excluded by the graph
+   * never reaches the registry and would be absent from the runtime's own
+   * account. De-duplication belongs here and not in the registry because only
+   * this layer sees all three stages: the same missing capability is legitimately
+   * noticed by the graph and again by the registry, and reporting one problem
+   * twice would make a healthy-but-degraded runtime look twice as broken.
+   */
+  readonly diagnostics: readonly Diagnostic[];
 }
 
 export interface AdminAreaSnapshot {

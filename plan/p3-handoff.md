@@ -18,8 +18,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | # | Slice | State |
 |---|---|---|
 | 1 | scaffold + `adminEngineContracts` + `adminEngineSnapshot` + `shared/atomicOperationPort` | done — 0e70323 |
-| 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | next |
-| 3 | menu — catalog-read, menu-editor, variant-management | |
+| 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | done — <hash> |
+| 3 | menu — catalog-read, menu-editor, variant-management | next |
 | 4 | inventory A — materials-read, stock-movements, stock-adjustment | |
 | 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | |
 | 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | |
@@ -78,6 +78,41 @@ as `roadmap.md` requires.
 - **An unexpected area is appended, never dropped.** An area we did not expect is
   information; hiding it would make the snapshot a worse witness than the
   runtime. Mutation-tested.
+- **`import.meta.glob` must be written out LITERALLY.** Verified by experiment,
+  not assumed. Vite replaces the expression during transformation by matching it
+  as text, so assigning it to a variable first type-checks and then throws at
+  runtime (`"import.meta.glob" is statically replaced during file
+  transformation`). It also needs the narrow `ImportMeta` augmentation in
+  `discoverAdminLogic.ts` to pass `tsc`, because it is a bundler feature
+  TypeScript does not know. A pattern matching zero files returns `{}` rather
+  than throwing — which is why an empty `engines/` folder starts cleanly. Do not
+  "tidy" either glob call into a helper variable.
+- **The atomic bridge is a child under `admin.runtime.shared`, not an area.** The
+  registry has no door for publishing a capability directly — capabilities come
+  from children, through the staged scope that makes rollback trustworthy.
+  Widening that door would let a host publish behind the registry's back, so the
+  port instead enters as a child that provides it. Its engine id has three
+  segments on purpose: `areaFromEngineId` only recognizes `admin.<area>`, so the
+  bridge cannot be mistaken for an eighth operational area while staying fully
+  visible in the generic snapshot. Consequence worth knowing: when no port is
+  supplied, nothing publishes the capability, and the dependency graph excludes
+  exactly the children that require it — no special-casing anywhere.
+- **Excluded children are still registered.** They are left out of the
+  initialization order but registered anyway, so they appear in the snapshot as
+  unavailable. A child the graph dropped that also vanished from the report would
+  be indistinguishable from one that was never written.
+- **A missing atomic port is only reported when something requires it.** Fixed
+  during S2's mutation round: it previously fired unconditionally, putting an
+  error in the snapshot of a healthy runtime with no multi-owner workflow. A
+  diagnostic that cries wolf trains its reader to stop looking.
+- **Test the de-duplication through a REACHABLE duplicate.** S2's first dedupe
+  test was vacuous and the mutation round caught it: a graph-excluded child is
+  never initialized, so the registry says nothing about it and only one
+  diagnostic ever exists — the assertion passed with dedupe switched off. The
+  reachable path is a provider that THROWS: it stays in the graph order, so its
+  consumer really is initialized and the registry reports the unmet requirement
+  once per `requires` entry. If a future test asserts "reported once", first
+  assert the raw duplicate exists upstream.
 - **Carried from P2:** no UI vocabulary anywhere in logic (no label, route, icon,
   component) per LOGIC §5/§11. Diagnostic severity always derives from the single
   map in `diagnostics.ts`, never stated at a report site. Fan-in diagnostic
@@ -86,19 +121,36 @@ as `roadmap.md` requires.
   not exported from module-system; children get capabilities through their
   injected context.
 
-## Notes for slice 2 specifically
+## Notes for slice 3 specifically
 
-- `discoverAdminLogic` uses the module system's `candidatesFromModules` +
-  `discoverDefinitions`. The glob shape is in LOGIC §7
-  (`./engines/*/*Engine.ts`, `./engines/*/children/**/*Child.ts`). `import.meta.glob`
-  is a bundler feature — it must not break `tsc` or a plain vitest run, and the
-  `definitions` override in `CreateAdminEngineOptions` exists so tests never
-  depend on what is on disk. Check how this behaves before committing to it.
-- Admin discovery must never scan Storefront (LOGIC §7 rule 9). `ADMIN_NAMESPACE`
-  is the cheap enforcement point — reject any id not under `admin.`.
-- `createAdminEngine` owns the startup sequence in LOGIC §7: discover → validate
-  → reject duplicates/orphans → resolve graph → initialize → expose snapshot. It
-  also owns the fan-in diagnostic de-duplication noted above, and republishing
-  the atomic port as a capability.
-- At this point `engines/` is still empty, so slice 2's own verification has to
-  run on injected definitions. That is fine and is what the override is for.
+Slice 3 is the FIRST real area, so it sets the pattern every later area slice
+copies. Getting the shape right matters more than getting it done fast.
+
+- **The engine room is finished and verified end to end.** Discovery already
+  finds a real area from disk with nothing injected (proved with a scratch area,
+  then removed — building it for real is exactly S3's job). So S3 writes only
+  area files: `engines/menu/menuEngine.ts`, `engines/menu/menuContracts.ts`, and
+  `engines/menu/children/**/*Child.ts` with a `*.test.ts` beside each child.
+  Nothing at the package root should need to change.
+- **Files must be named to match the globs** or they are invisible:
+  `*Engine.ts` directly under `engines/menu/`, and `*Child.ts` somewhere under
+  `engines/menu/children/`. A correct child in a wrongly-named file loads
+  nothing and reports nothing. The structure checker will catch a misplaced
+  file, but not a mis-suffixed one that still sits in an allowed folder.
+- **Each definition file exports ONE definition**, as `default` or a single
+  named export — `candidatesFromModules` takes the default if present, otherwise
+  the sole export, and anything ambiguous is left to fail validation.
+- **The three menu children are `catalog-read`, `menu-editor`, and
+  `variant-management`.** Per LOGIC §8 none of them requires anything, which is
+  why menu is first: several other areas require `admin.menu.catalog-read`, so
+  everything downstream stays blocked until this exists.
+- **A child publishes what it declares — exactly.** The registry rolls a child
+  back if it publishes an undeclared capability or fails to publish a declared
+  one, so `provides` and the `provide()` calls have to agree.
+- **Tests are permanent from here on** (one beside each child), not throwaway.
+  Still mutation-check them: break the behavior, confirm the test fails, restore.
+  S2 proved this is not ceremony — it caught a test that could not fail and a
+  diagnostic that cried wolf.
+- Behavior comes from SOURCE `apps/admin/src/features/menu/*` (46 files — use a
+  scout agent to read it, port in the main thread). Structure comes from
+  `plan.json`, never from SOURCE's layout.

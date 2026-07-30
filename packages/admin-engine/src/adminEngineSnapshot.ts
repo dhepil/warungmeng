@@ -13,7 +13,8 @@
 // does not know, and must not know, that `admin.orders` is an area of an admin
 // application (LOGIC §5).
 
-import type { ApplicationEngineSnapshot } from "@warungmeng/module-system";
+import type { ApplicationEngineSnapshot, Diagnostic } from "@warungmeng/module-system";
+import { createDiagnosticCollector } from "@warungmeng/module-system";
 import type {
   AdminArea,
   AdminAreaSnapshot,
@@ -42,9 +43,14 @@ export function areaFromEngineId(engineId: string): string | undefined {
  * them so the output is stable across runs, with any unrecognized area appended
  * afterwards rather than dropped — an area we did not expect is information, and
  * silently hiding it would make the snapshot a worse witness than the runtime.
+ *
+ * `startupDiagnostics` are the findings from stages the runtime snapshot cannot
+ * know about (discovery and the dependency graph). They are passed in rather than
+ * read from a collector so this function stays pure.
  */
 export function projectAdminSnapshot(
   runtime: ApplicationEngineSnapshot,
+  startupDiagnostics: readonly Diagnostic[] = [],
 ): AdminEngineSnapshot {
   const byArea = new Map<string, AdminAreaSnapshot>();
 
@@ -99,7 +105,36 @@ export function projectAdminSnapshot(
     }
   }
 
-  return { runtime, areas: ordered, missingAreas };
+  return {
+    runtime,
+    areas: ordered,
+    missingAreas,
+    diagnostics: mergeStartupDiagnostics(startupDiagnostics, runtime.diagnostics),
+  };
+}
+
+/**
+ * Merges the three startup stages into one account, dropping repeats.
+ *
+ * Order is chronological — discovery and graph findings first, then the
+ * registry's — so reading the list top to bottom follows what actually happened.
+ *
+ * De-duplication delegates to the module system's collector instead of comparing
+ * diagnostics here. That is deliberate: "when are two diagnostics the same
+ * problem" is already answered in one place, and a second answer living in this
+ * package would be free to drift from it. The same unmet capability really is
+ * noticed twice — once by the graph excluding the child, once by the registry
+ * skipping it — and that is one problem, not two.
+ */
+export function mergeStartupDiagnostics(
+  startupDiagnostics: readonly Diagnostic[],
+  runtimeDiagnostics: readonly Diagnostic[],
+): readonly Diagnostic[] {
+  const merged = createDiagnosticCollector({ deduplicate: true });
+  for (const entry of [...startupDiagnostics, ...runtimeDiagnostics]) {
+    merged.report(entry);
+  }
+  return merged.list();
 }
 
 /** True when every expected area loaded and every child in them is active. */
