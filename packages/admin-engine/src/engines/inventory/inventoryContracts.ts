@@ -24,6 +24,7 @@ import type {
   InventoryStockBalance,
   InventorySupplier,
   InventoryUnit,
+  MenuHppBreakdown,
   MenuRecipe,
   Money,
   Order,
@@ -34,7 +35,7 @@ import {
   calculateMovementBaseDelta,
   convertInventoryQuantity,
 } from "@warungmeng/domain";
-import type { OperationResult } from "@warungmeng/module-system";
+import type { OperationIssue, OperationResult } from "@warungmeng/module-system";
 import {
   createCapabilityToken,
   createOutboundPortToken,
@@ -862,3 +863,79 @@ export interface StockReversal {
 export const STOCK_REVERSAL_ID = "admin.inventory.stock-reversal";
 
 export const STOCK_REVERSAL = createCapabilityToken<StockReversal>(STOCK_REVERSAL_ID);
+
+// ─── Costing contracts (child: hpp-calculation) ───────────────────────────────
+
+/**
+ * The pricing defaults SOURCE baked into its call site.
+ *
+ * `useInventoryHpp` called `calculateRecommendedSellingPrice(total)` with no
+ * further arguments, so the domain's defaults — 60% target margin, rounded up to
+ * the nearest 500 — were the product's pricing policy while looking like library
+ * trivia. Named here so they are visible and can be changed in one place.
+ */
+export const HPP_TARGET_MARGIN_PERCENTAGE = 60;
+export const HPP_PRICE_ROUNDING_STEP = 500;
+
+/** Why one menu's cost could not be worked out. */
+export const COSTING_ISSUE = {
+  /** The recipe names an ingredient the store no longer has. */
+  missingIngredient: "recipe-ingredient-missing",
+  /** The recipe's costs make the total negative, so no price can be recommended. */
+  negativeTotal: "recipe-total-negative",
+  /** The recipe exists but has no components, so the total is packaging only. */
+  emptyRecipe: "recipe-has-no-components",
+  /** The recipe depends on an archived ingredient's cost. */
+  archivedIngredient: "recipe-uses-archived-ingredient",
+  /** The menu catalog is unreachable, so there is nothing to cost. */
+  noCatalog: "menu-catalog-unavailable",
+} as const;
+
+/**
+ * One menu's cost picture.
+ *
+ * `hpp` is null when the menu has no recipe — which is a normal state, not a
+ * failure, and SOURCE showed it as a dash. `marginPercentage` and
+ * `recommendedPrice` are null whenever they cannot be computed, which includes
+ * having no recipe, a selling price of zero, and a recipe whose total is negative.
+ */
+export interface MenuCostBreakdown {
+  readonly menuItemId: string;
+  readonly menuName: string;
+  readonly sellingPrice: Money;
+  readonly hpp: MenuHppBreakdown | null;
+  readonly marginPercentage: number | null;
+  readonly recommendedPrice: Money | null;
+  readonly issues: readonly OperationIssue[];
+}
+
+/**
+ * Every menu's cost picture, plus the ones that could not be worked out.
+ *
+ * `failedMenuItemIds` exists because costing is per-menu and one bad recipe must
+ * not take the rest down. SOURCE had two incompatible policies over exactly this
+ * data: the HPP screen wrapped the whole fan-out in one `catch` and blanked every
+ * row when any single menu threw, while the dashboard used `Promise.allSettled`
+ * and degraded per item. The degrading one is right, so it is the only one here.
+ */
+export interface MenuCostCollection {
+  readonly items: readonly MenuCostBreakdown[];
+  readonly failedMenuItemIds: readonly string[];
+}
+
+/**
+ * Costing menus against their recipes (capability
+ * `admin.inventory.hpp-calculation`).
+ *
+ * The only inventory child that REQUIRES another area: LOGIC §8 gives it
+ * `admin.menu.catalog-read`, because a cost is meaningless without the menu's name
+ * and selling price. That is why the Menu area had to be built first.
+ */
+export interface HppCalculation {
+  calculateMenuCost(menuItemId: string): Promise<OperationResult<MenuCostBreakdown>>;
+  queryMenuCosts(): Promise<OperationResult<MenuCostCollection>>;
+}
+
+export const HPP_CALCULATION_ID = "admin.inventory.hpp-calculation";
+
+export const HPP_CALCULATION = createCapabilityToken<HppCalculation>(HPP_CALCULATION_ID);
