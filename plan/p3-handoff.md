@@ -28,8 +28,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | done — d32dba3 |
 | 3 | menu — catalog-read, menu-editor, variant-management | done — 69b560d, d14ffb5, 8513852 |
 | 4 | inventory A — materials-read, stock-movements, stock-adjustment | done — 9b9fad9, 69628a7, 0af1ccf |
-| 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | next |
-| 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | |
+| 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | done — 47ece49, 65a064f, ba49026, a19ba0a |
+| 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | next |
 | 7 | orders — order-read, order-submission | |
 | 8 | orders — order-cancellation + `cancelOrderAtomically` | |
 | 9 | pos — session, cart | |
@@ -275,6 +275,66 @@ as `roadmap.md` requires.
 - **`allowNegativeStock` stays unexposed.** The domain parameter exists and
   defaults to false. No SOURCE caller ever set it, not even a test. Threading a
   flag nobody uses would be inventing a feature, not porting one.
+
+## Decisions locked during S5 (inventory part two)
+
+- **One primitive, with the difference NAMED — do not fork a shared rule.** S4's
+  `planStockMovement` carried two rules lifted from the manual entry form: a 0.01
+  minimum and two-decimal rounding. A consumption quantity is computed from recipe
+  arithmetic and can legitimately be 0.001 or carry many decimals, so those two
+  rules had to not apply. The wrong fix was a second planning function; the right
+  one was `QuantitySource` (`"entered"` | `"derived"`) with ONLY those two rules
+  branching on it. Everything else — ingredient exists and is active, unit
+  converts, purchase carries a cost, balance may not go negative — applies to
+  both, which is the entire reason one primitive exists. When a shared rule
+  genuinely differs between callers, name the difference in the input rather than
+  duplicating the judge.
+- **A plan must validate exactly what the write validates.** SOURCE's consumption
+  ran a "projected balances" dry run so an under-stocked order failed before any
+  write, but the projection checked only that each ingredient EXISTED while the
+  real write also refused archived ones. An order naming an archived ingredient
+  therefore passed the dry run and threw partway through the write loop, leaving
+  some components consumed and the rest not. Any time you see a pre-check and a
+  write in the same flow, they must be the same judge, or they will drift and the
+  drift will be a partial write.
+- **An idempotent operation must say whether it did anything.** SOURCE's guard
+  returned the existing rows and said nothing, so the POS retry treated a
+  non-throwing call as success and cleared its pending-sync flag for an order it
+  had never finished consuming. `StockLedgerOutcome.replayed` exists for this.
+  Applies to every retryable path in P3, notably slices 8 and 9.
+- **A no-op that leaves no trace can never become idempotent.** An order whose
+  items all lack recipes wrote zero rows; because the guard keys on rows existing,
+  it never latched, so every retry re-ran the whole thing. It is now a named
+  failure. Watch for this shape anywhere a guard keys on the side effect it guards.
+- **Invert a stored effect, never re-derive it.** The reversal negates the recorded
+  `baseQuantityDelta`. SOURCE rebuilt the quantity from the consumed row's entered
+  value and unit and re-ran the conversion against the ingredient's CURRENT
+  definition, so a `g`→`kg` edit between consuming and cancelling restored 1000×,
+  and a `g`→`ml` edit threw — which, through cancellation's rollback, left the
+  order permanently un-cancellable behind a "retryable" failure that could never
+  succeed. If you are undoing a recorded effect, use the number that was recorded.
+- **Batch what is one event.** `commitMovements` takes the whole set, because a
+  half-consumed order is worse than a refused one and because the atomic port
+  (LOGIC §10) should wrap one call rather than N. The child does not claim
+  atomicity — only an adapter can promise that — it makes the batch expressible.
+- **A `requires` is enforced, and worth testing both ways.** `hpp-calculation` is
+  the first child with one. Its test composes BOTH areas, and also composes the
+  runtime WITHOUT the Menu area to prove the dependency graph excludes the child
+  rather than letting it publish a capability that cannot work. Note the
+  asymmetry: a missing required *capability* means the child is never created; a
+  missing injected *port* is a legal state where the child still publishes and
+  answers honestly. Do not conflate them.
+- **Resolve a sibling area's capability from context; import only its contract
+  types.** `hpp-calculation` imports `MENU_CATALOG_READ` and `CatalogRead` from
+  `engines/menu/menuContracts` and nothing else. No child imports another child.
+- **When one dataset has two resilience policies, the degrading one wins.** SOURCE
+  costed menus all-or-nothing on the HPP screen and per-item on the dashboard. One
+  bad recipe blanked the entire table in the first and one tile in the second.
+  Per-item is now the only policy.
+- **Name a policy that is hiding in default arguments.** "60% target margin, round
+  up to 500" was the product's pricing rule expressed as the domain's default
+  parameters at a single call site. It is `HPP_TARGET_MARGIN_PERCENTAGE` and
+  `HPP_PRICE_ROUNDING_STEP` now. Same class of problem as rules in form props.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 

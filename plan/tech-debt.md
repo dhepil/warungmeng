@@ -288,34 +288,6 @@ not a change to `stock-adjustment`.
 
 ---
 
-## D14 — The movement query cannot filter by `referenceId` · `scheduled`
-
-**Found:** P3 S4, while defining `MovementStoreQuery`. **Scheduled for S5. No
-owner decision needed** — this was mis-filed as one. It is not a choice between
-designs; it is a lookup the next slice needs and the port does not yet allow. One
-optional field, inside the area S5 is already building, with the plainly correct
-shape. S5 adds it and records that it did.
-
-`referenceId` is a public field on every movement and is what SOURCE's idempotency
-check keys on — consumption bails if a `consumption` row already exists for an
-order id, reversal bails if an `adjustment-in` does. But SOURCE's movement query
-carried only `ingredientId`, `outletId` and `type`, so the check worked by
-scanning the full movement array in memory. The port faithfully reproduces that
-gap: you can read `referenceId` on a returned row, you cannot query by it.
-
-**Why it was left:** adding it in S4 would have been speculative — no S4 child
-needs it, and a port method nobody calls invites an adapter to implement dead
-surface. Recorded so S5 does not rediscover it as a surprise.
-
-**What S5 does:** add `referenceId?: string` to `MovementStoreQuery`, use it in the
-consumption and reversal idempotency checks, and delete this entry on the way out
-(a resolved item belongs in `porting-log.md`, per the top of this file).
-
-**What it costs to leave:** the idempotency check is a linear scan of every
-movement ever recorded, on every checkout.
-
----
-
 ## D9 — Dead discount branch, ported nowhere · `accepted`
 
 **Found:** P3 S3.
@@ -367,23 +339,38 @@ being violated in spirit.
 
 ---
 
-## D16 — Recipes are read through the port but nothing owns them yet · `open`
+## D16 — No recipe WRITE path, and no child owns recipe editing · `open`
 
-**Found:** P3 S4, while defining `InventoryStorePort`.
+**Found:** P3 S4 as "recipes are not on the port at all". **Half resolved in S5**:
+`listRecipes` was added, because `hpp-calculation` genuinely needed it. This entry
+is now the narrower remaining gap, restated rather than deleted.
 
-`listRecipes` and `saveRecipe` exist in SOURCE's repository and are consumed by
-HPP and by the dashboard, but `InventoryStorePort` as written in S4 does not carry
-them — S4's three children have no use for them, and adding unused methods to a
-port invites an adapter to implement something nobody calls.
+`saveRecipe` is still absent from `InventoryStorePort`, so nothing in this runtime
+can create or change a recipe — the engine can only cost recipes that already
+exist. SOURCE's repository had `saveRecipe`, and the only caller was
+`InventoryRecipeDialog`.
 
-**Why it was left:** speculative port surface is its own kind of drift. S5 builds
-`hpp-calculation`, which genuinely needs recipe reads, and that is the slice that
-should add them.
+**Why it stays out:** LOGIC §8 names no child that owns recipe editing, so adding
+the write method now would put a method on the port with no logic behind it — the
+dead-surface problem the S5 addition of `listRecipes` was careful to avoid. It also
+carries a pile of rules that currently live nowhere in logic, because in SOURCE
+they were AntD form props: at least one component, quantity minimum 0.01, cost
+floors, and the unit-compatibility filtering. And SOURCE's dialog generated
+component ids **index-positionally** (`recipe?.components[index]?.id ?? ...`), so
+deleting a row made the remaining rows inherit their neighbours' identities.
+Nothing reads `RecipeComponent.id` today, so that is latent rather than corrupting
+— but a recipe editor must not reproduce it.
 
-**What it costs to fix:** two methods on the port in S5, where the requirement is
-real. Recorded here only so S5 does not treat their absence as an oversight.
+**What it costs to fix:** a new child, most likely `recipe-editor`, with its own
+capability, plus the write method and the rules above moved into logic. That is a
+slice of its own, not an addition to an existing one, and it is P5-adjacent since
+the screen is what needs it.
 
-**Related:** D14, the same shape of deliberate gap.
+**What it costs to leave:** recipes can only be changed by seeding data, so HPP
+costs whatever the seed says. Acceptable while there is no UI at all.
+
+**Revisit at:** whenever the recipe screen is scheduled. Raise with the owner then,
+since it needs a `plan.json` slot for the new child.
 
 ---
 
@@ -406,3 +393,120 @@ is which.
 
 **What it costs to leave:** every future session starts with a dirty tree, so
 "working tree clean" stops being a usable signal that nothing unexpected happened.
+
+---
+
+## D18 — An unpaid order that consumed stock never gets it back · `open`
+
+**Found:** P3 S5, from the scout's read of SOURCE's cancellation command.
+**Belongs to the order-cancellation slice, not to inventory.**
+
+POS consumes stock for **every** order regardless of payment status, but SOURCE's
+cancellation only called the reversal when a refund projection was non-empty —
+i.e. only when the order had been paid. An unpaid order that consumed stock and is
+then cancelled silently keeps the stock deducted. SOURCE asserted the
+refund-gated behavior as intended in its own tests, so it is not obviously a
+mistake; what is missing is any handling of the unpaid-but-consumed case.
+
+**Why it is not fixed here:** `stock-reversal` is a capability, and the decision of
+*when* to call it belongs to `admin.orders.order-cancellation` (slice 8). Inventory
+supplying the ability to reverse is the right split; inventory deciding the refund
+policy would not be.
+
+**What it costs to fix:** one condition in the cancellation slice — reverse when
+stock was consumed, not when money was refunded. The reversal side is already
+idempotent and reports a replay, so calling it more eagerly is safe.
+
+**Action for slice 8:** decide the trigger deliberately and record it. Do not
+inherit the refund gate by accident.
+
+---
+
+## D19 — HPP rounds three times over the same figures · `accepted`
+
+**Found:** P3 S5, reading the domain's costing math.
+
+`calculateMenuHpp` rounds each component's cost to 2dp, then rounds the **sum of
+already-rounded** costs, then rounds again after adding packaging and extras.
+Every step is `roundMoney`, so the error is small, but the total is not the round
+of the true sum.
+
+**Why it is accepted:** the arithmetic is in `packages/domain`, a closed phase, and
+it is SOURCE's exact expression. Changing it would move every cost figure the owner
+currently sees. Compounds with D11 (the unrounded average cost that feeds it) and
+should be decided together with it.
+
+**Also noted:** `calculateGrossMarginPercentage` rounds without the `Number.EPSILON`
+nudge that `roundMoney` uses, so one module rounds two ways — the same class of
+inconsistency S4 fixed in `roundEntered`. And the margin is unclamped: a cost above
+the selling price yields a negative percentage with no label saying "loss-making".
+
+**Revisit at:** the same moment as D11.
+
+---
+
+## D20 — Dashboard COGS restates history every time a cost moves · `open`
+
+**Found:** P3 S5, from the scout's sweep for HPP consumers. **Slice 11.**
+
+The dashboard multiplies **today's** HPP — derived from today's average unit cost —
+against **historical** order quantities. So every purchase that moves an average
+silently rewrites past cost-of-goods and past gross margin. Last month's profit
+figure changes because someone bought flour today.
+
+**Why it is not fixed here:** it is the dashboard's computation, and the dashboard
+is slice 11. Inventory supplies the cost; what the dashboard does across time is
+its own decision.
+
+**What a fix looks like:** store the unit cost **on the consumption movement** at
+the moment of sale, and compute historical COGS from that instead of from the
+ingredient's current average. The ledger already has a `unitCost` field, and
+consumption currently writes `null` into it — as SOURCE did.
+
+**What it costs to leave:** historical financial figures are not stable. For a
+single warung this may be perfectly tolerable; it is the owner's call, not mine.
+
+**Action for slice 11:** flag it rather than quietly reproducing it. Distinct from
+D11 — that one is precision, this one is time.
+
+---
+
+## D21 — An archived ingredient blocks cancelling an order that used it · `accepted`
+
+**Found:** P3 S5, while building `stock-reversal`.
+
+Archiving an ingredient makes its stock immovable, and a reversal is a stock
+movement — so an order that consumed an ingredient which has since been archived
+cannot be reversed, and therefore (once slice 8 exists) cannot be cancelled. In
+SOURCE this surfaced as a `retryable: true` failure whose retry could never
+succeed. Here it is at least an honest, named refusal before anything is written.
+
+**Why it is accepted:** the alternative is letting a reversal move archived stock,
+which contradicts the rule the whole area enforces. `archiveIngredient` has no
+guard against open orders referencing the ingredient, so the real fix is upstream:
+refuse to archive while unreversed consumption exists, which needs an order query
+inventory does not have and should not grow.
+
+**What to watch:** if this bites in practice, the fix is a guard at archive time,
+not a hole at reversal time.
+
+---
+
+## D22 — A seeded `adjustment-in` can still suppress a real reversal · `accepted`
+
+**Found:** P3 S5, while building `stock-reversal`.
+
+The reversal's idempotency guard keys on `(referenceId, "adjustment-in")`, and
+`adjustment-in` is a generic user-facing movement type. Any row of that type
+carrying an order's id makes the guard believe the order was already reversed.
+
+**Why it is accepted, and why it is nearly harmless here:** nothing reachable
+through the admin engine can create such a row — `RecordMovementInput` has no
+`referenceId` field at all and `stock-adjustment` passes `null` unconditionally. In
+SOURCE the same protection existed only because one dialog happened to hardcode
+`null`; here it is structural. Only externally seeded or directly-written data can
+still do it. A dedicated `reversal` movement type would close it completely, but
+`InventoryMovementType` lives in `packages/domain`, a closed phase.
+
+**Revisit at:** whenever the domain is next open. One new union member and one
+constant.
