@@ -18,7 +18,7 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | # | Slice | State |
 |---|---|---|
 | 1 | scaffold + `adminEngineContracts` + `adminEngineSnapshot` + `shared/atomicOperationPort` | done — 0e70323 |
-| 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | done — <hash> |
+| 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | done — d32dba3 |
 | 3 | menu — catalog-read, menu-editor, variant-management | next |
 | 4 | inventory A — materials-read, stock-movements, stock-adjustment | |
 | 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | |
