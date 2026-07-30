@@ -299,3 +299,69 @@ export interface MaterialsRead {
 export const MATERIALS_READ_ID = "admin.inventory.materials-read";
 
 export const MATERIALS_READ = createCapabilityToken<MaterialsRead>(MATERIALS_READ_ID);
+
+// ─── Ledger contracts (child: stock-movements) ───────────────────────────────
+
+export type MovementTypeFilter = "all" | InventoryMovementType;
+
+/**
+ * Query input for the movement ledger.
+ *
+ * These are the three dimensions SOURCE's store query carried and honoured. They
+ * are expressed as a filter here — `"all"` and `null` mean unfiltered — and
+ * translated into the port's narrower query, so a caller never has to build the
+ * store's shape itself.
+ *
+ * There is deliberately no date-range filter: SOURCE had none, and adding one
+ * would be a new feature rather than a ported one.
+ */
+export interface MovementListFilters {
+  readonly ingredientId: string | null;
+  readonly outletId: string | null;
+  readonly type: MovementTypeFilter;
+}
+
+export const DEFAULT_MOVEMENT_LIST_FILTERS: MovementListFilters = {
+  ingredientId: null,
+  outletId: null,
+  type: "all",
+};
+
+/**
+ * A ledger row joined to the ingredient it moved.
+ *
+ * SOURCE's table looked the ingredient up while rendering, from a separately
+ * fetched list of active ingredients — so a movement whose ingredient had since
+ * been archived rendered with a blank name. Joining here means the row either
+ * carries its ingredient or says plainly that it could not be resolved.
+ *
+ * `ingredient` is null when the movement references an ingredient the store no
+ * longer returns. That is a dangling reference, and it is surfaced rather than
+ * hidden: the ledger is an audit record, so a row that cannot be explained is
+ * information, not something to filter out.
+ */
+export interface MovementListItem {
+  readonly movement: InventoryMovement;
+  readonly ingredient: InventoryIngredient | null;
+}
+
+/**
+ * The Inventory area's ledger read surface — the capability LOGIC §8 names
+ * `admin.inventory.stock-movements`, required by `admin.dashboard.reports`.
+ *
+ * `listMovements` returns raw domain rows for the reporting consumer;
+ * `queryMovements` returns the joined rows the admin list shows. Both are
+ * ordered newest-first with a deterministic tie-break — see the child.
+ */
+export interface StockMovements {
+  listMovements(
+    filters?: MovementListFilters,
+  ): Promise<OperationResult<readonly InventoryMovement[]>>;
+  queryMovements(
+    filters?: MovementListFilters,
+  ): Promise<OperationResult<readonly MovementListItem[]>>;
+}
+
+export const STOCK_MOVEMENTS_ID = "admin.inventory.stock-movements";
+
+export const STOCK_MOVEMENTS = createCapabilityToken<StockMovements>(STOCK_MOVEMENTS_ID);
