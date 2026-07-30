@@ -21,6 +21,8 @@ import type {
   MenuCategory,
   MenuItem,
   MenuVariantGroup,
+  SalesInterval,
+  Weekday,
 } from "@warungmeng/domain";
 import type { OperationResult } from "@warungmeng/module-system";
 import { createCapabilityToken, createOutboundPortToken } from "@warungmeng/module-system";
@@ -204,3 +206,128 @@ export interface CatalogRead {
 export const MENU_CATALOG_READ_ID = "admin.menu.catalog-read";
 
 export const MENU_CATALOG_READ = createCapabilityToken<CatalogRead>(MENU_CATALOG_READ_ID);
+
+// ─── Editor contracts (child: menu-editor) ───────────────────────────────────
+
+/**
+ * Field length limits, lifted out of the SOURCE form components.
+ *
+ * In SOURCE these existed only as `maxLength` on an input, so they were real
+ * rules enforced in a place that has no authority over rules — anything not
+ * going through that one form skipped them entirely, and the UI rebuild in a
+ * later phase would have had to rediscover them. LOGIC §13 puts validation
+ * below the screen, so they live here and the editor enforces them.
+ */
+export const MENU_NAME_MAX_LENGTH = 120;
+export const MENU_DESCRIPTION_MAX_LENGTH = 500;
+export const CATEGORY_NAME_MAX_LENGTH = 80;
+
+/** The weekdays a scheduled menu defaults to — every day. */
+export const MENU_EDITOR_WEEKDAYS: readonly Weekday[] = [
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+  "sun",
+];
+
+/** SOURCE's cap, matching the domain's own `MAX_SALES_INTERVALS`. */
+export const MENU_EDITOR_MAX_INTERVALS = 3;
+
+export type MenuEditorInventoryMode = "untracked" | "tracked";
+export type MenuEditorSalesMode = "always" | "scheduled";
+
+/**
+ * The flattened shape a menu is edited in.
+ *
+ * Deliberately NOT `MenuItem`. A `MenuItem` models availability, inventory and
+ * schedule as discriminated unions, which is right for storage and awkward to
+ * edit one field at a time; SOURCE flattened them for its form and converted
+ * back on save. That conversion is behavior, so it comes along — but the shape
+ * carries no UI vocabulary: these are values, not fields, and nothing here says
+ * how any of them is presented.
+ */
+export interface MenuEditorValues {
+  readonly name: string;
+  readonly categoryId: string;
+  readonly description: string;
+  readonly imageUrl: string;
+  readonly priceAmount: number;
+  readonly available: boolean;
+  readonly visible: boolean;
+  readonly inventoryMode: MenuEditorInventoryMode;
+  readonly stockQuantity: number;
+  readonly salesMode: MenuEditorSalesMode;
+  readonly activeDays: readonly Weekday[];
+  readonly allDay: boolean;
+  readonly intervals: readonly SalesInterval[];
+  readonly variantGroupIds: readonly string[];
+}
+
+/**
+ * Everything needed to start editing: the values themselves, the categories to
+ * choose from, and the variant groups that may be attached.
+ *
+ * `baseline` is null for a new menu. It is carried so a caller can tell create
+ * from edit without inspecting an id, and so the values can be compared against
+ * what was stored.
+ */
+export interface MenuDraft {
+  readonly baseline: MenuItem | null;
+  readonly values: MenuEditorValues;
+  readonly categories: readonly MenuCategory[];
+  /**
+   * Only groups with `visibility: "visible"` (SOURCE
+   * `getSelectableVariantGroups`). A hidden group already attached to this menu
+   * stays attached — it is absent from the choices, not stripped from `values`.
+   */
+  readonly selectableVariantGroups: readonly MenuVariantGroup[];
+}
+
+export interface SaveMenuInput {
+  /** Null creates; an id updates. */
+  readonly menuId: string | null;
+  readonly values: MenuEditorValues;
+}
+
+export interface CategoryEditorValues {
+  readonly name: string;
+  readonly visible: boolean;
+}
+
+export interface SaveCategoryInput {
+  readonly categoryId: string | null;
+  readonly values: CategoryEditorValues;
+}
+
+/**
+ * Writing menus and categories — create, edit, delete, and the list's
+ * availability and visibility toggles.
+ *
+ * One child rather than several, per LOGIC §12 rule 6: create and edit share an
+ * invariant and a lifecycle, and the toggles are edits to the same entity
+ * reached from a different screen. Splitting them would have put the same
+ * validation in two places.
+ *
+ * Every command returns a normalized result and none of them throws (LOGIC §5).
+ */
+export interface MenuEditor {
+  startMenuDraft(): Promise<OperationResult<MenuDraft>>;
+  loadMenuDraft(menuId: string): Promise<OperationResult<MenuDraft>>;
+  saveMenu(input: SaveMenuInput): Promise<OperationResult<MenuItem>>;
+  deleteMenu(menuId: string): Promise<OperationResult<string>>;
+  setMenuAvailability(menuId: string, available: boolean): Promise<OperationResult<MenuItem>>;
+  setMenuVisibility(menuId: string, visible: boolean): Promise<OperationResult<MenuItem>>;
+  saveCategory(input: SaveCategoryInput): Promise<OperationResult<MenuCategory>>;
+  /**
+   * Refuses while any menu still points at the category, reporting how many do
+   * (SOURCE `deleteMenuCategoryIfUnused` — the one guarded write in the area).
+   */
+  deleteCategory(categoryId: string): Promise<OperationResult<string>>;
+}
+
+export const MENU_EDITOR_ID = "admin.menu.menu-editor";
+
+export const MENU_EDITOR = createCapabilityToken<MenuEditor>(MENU_EDITOR_ID);
