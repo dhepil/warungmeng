@@ -172,6 +172,128 @@ had something more valuable to do. Skippable indefinitely.
 
 ---
 
+## D10 — The shared write primitive lives in a contracts file · `open`
+
+**Found:** P3 S4 (inventory part one). **Owner asked to decide.**
+
+`planStockMovement`, `roundEntered` and `recomputeAverageUnitCost` are behavior,
+and they sit in `engines/inventory/inventoryContracts.ts`, which every other area
+uses for types only.
+
+**Why it was done:** all three inventory write paths must share one set of
+invariants — the manual adjustment (S4) and consumption and reversal (S5). LOGIC
+§8 shows neither S5 child requiring a capability from a sibling, so
+`stock-consumption` cannot depend on `stock-adjustment`. `plan.json` lists no
+shared-helper slot inside an area (`engines/*` allows `*Engine.ts`,
+`*Contracts.ts`, and `children/**`), and `packages/domain` is a closed phase. The
+alternatives were a cross-sibling import, which the area-slice pattern forbids, or
+three copies of the invariants — which is exactly how SOURCE ended up with four
+low-stock rules.
+
+**What it costs to fix:** one line in `plan.json` adding something like
+`engines/*/<area>Operations.ts` to the `allow` list, then moving three functions.
+Cheap mechanically. The reason it was not done in-slice is rule 7: the plan wins,
+and an agent editing `plan.json` to make its own design fit is the exact failure
+mode the guardrails exist to prevent. Only the owner can widen it.
+
+**What it costs to leave:** a reader of any other area's contracts file learns
+that "contracts hold no behavior" is not quite true, and the next agent may either
+copy the exception where it is not needed or try to tidy it away and break S5. The
+file says at length why it is there, which mitigates but does not remove this.
+
+**Decide before S5**, since consumption and reversal will import it.
+
+---
+
+## D11 — Average unit cost is unrounded float, and feeds prices · `open`
+
+**Found:** P3 S4, reading SOURCE's cost math.
+
+`recomputeAverageUnitCost` performs no rounding, exactly as SOURCE did. Each
+purchase feeds the previous unrounded average back into the numerator, so the
+error compounds across an ingredient's whole purchase history with no
+re-anchoring, and there is no recompute-from-ledger path.
+
+The value is the single input to all costing: HPP, the recommended selling price,
+the gross margin, the reporting COGS, and the figure shown in the materials list.
+HPP itself then rounds to two decimals, and the recommended price rounds to the
+nearest 500 — so three different money conventions coexist for a currency with no
+minor unit.
+
+**Why it was left:** rounding it would change every cost figure the owner
+currently sees, which is a behavior change dressed as a bug fix. It also cannot be
+decided in isolation: whether IDR money should be integer rupiah is a question
+about `packages/domain`'s `Money`, and it affects the Menu and Finance areas too.
+
+**What it costs to fix:** one rounding call, plus a decision about which
+precision is correct, plus accepting that existing stored averages are already
+drifted and would need recomputing from the ledger to become consistent.
+
+**What it costs to leave:** cost figures are approximately right and slowly get
+less so. Nobody will notice until two reports disagree by a rupiah.
+
+**Revisit at:** whenever `Money` gains an integer-minor-unit invariant. Related:
+D12.
+
+---
+
+## D12 — "piece" and "portion" are interchangeable · `accepted`
+
+**Found:** P3 S4, reading the domain's unit table.
+
+Both are dimension `count` with factor 1, so 5 portions convert to 5 pieces with
+no complaint, and both appear in the unit list for any count-based ingredient.
+Nothing in the codebase treats them differently.
+
+**Why it is accepted:** it is the domain's table, unchanged from SOURCE, and it is
+a closed phase. Separating them would either forbid a conversion the old app
+allowed or require a per-ingredient portion size, which is a feature.
+
+**What to watch:** if a recipe ever means "portion" as a serving rather than a
+countable unit, this silently under- or over-consumes stock.
+
+---
+
+## D13 — An adjustment can only be a delta, never an absolute count · `accepted`
+
+**Found:** P3 S4.
+
+There is no "set stock to N" operation. To correct a count after a stocktake the
+user computes the difference themselves and records an `adjustment-in` or
+`adjustment-out`, and nothing shows them the current level while they do it.
+
+**Why it is accepted:** SOURCE had no such operation either, and adding one is a
+new capability rather than a ported one. It is also not purely additive — an
+absolute set has to decide what ledger row it writes, which is the same question
+as a stocktake feature.
+
+**Revisit at:** whenever a stocktake workflow is wanted. It would be a new child,
+not a change to `stock-adjustment`.
+
+---
+
+## D14 — The movement query cannot filter by `referenceId` · `open`
+
+**Found:** P3 S4, while defining `MovementStoreQuery`. **S5 will hit this.**
+
+`referenceId` is a public field on every movement and is what SOURCE's idempotency
+check keys on — consumption bails if a `consumption` row already exists for an
+order id, reversal bails if an `adjustment-in` does. But SOURCE's movement query
+carried only `ingredientId`, `outletId` and `type`, so the check worked by
+scanning the full movement array in memory. The port faithfully reproduces that
+gap: you can read `referenceId` on a returned row, you cannot query by it.
+
+**Why it was left:** adding it in S4 would have been speculative — no S4 child
+needs it. It is recorded here so S5 does not rediscover it as a surprise.
+
+**What it costs to fix:** one optional field on `MovementStoreQuery` and its use
+in the two S5 children. Do it in S5, where the requirement is real.
+
+**What it costs to leave:** the idempotency check is a linear scan of every
+movement ever recorded, on every checkout.
+
+---
+
 ## D9 — Dead discount branch, ported nowhere · `accepted`
 
 **Found:** P3 S3.

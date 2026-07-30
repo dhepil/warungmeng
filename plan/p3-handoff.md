@@ -27,8 +27,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 1 | scaffold + `adminEngineContracts` + `adminEngineSnapshot` + `shared/atomicOperationPort` | done — 0e70323 |
 | 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | done — d32dba3 |
 | 3 | menu — catalog-read, menu-editor, variant-management | done — 69b560d, d14ffb5, 8513852 |
-| 4 | inventory A — materials-read, stock-movements, stock-adjustment | next |
-| 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | |
+| 4 | inventory A — materials-read, stock-movements, stock-adjustment | done — 9b9fad9, 69628a7, 0af1ccf |
+| 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | next |
 | 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | |
 | 7 | orders — order-read, order-submission | |
 | 8 | orders — order-cancellation + `cancelOrderAtomically` | |
@@ -197,15 +197,20 @@ as `roadmap.md` requires.
   the capability in `requires` and captures it from its context — the same path
   inventory HPP and POS checkout will use. A direct `create()` call would pass
   even if the capability were published under the wrong id. Copy this helper.
-- **Verify on-disk discovery with a throwaway test, every area slice.** The
-  structure checker catches a misplaced file but NOT a mis-suffixed one in an
-  allowed folder — `catalogRead.ts` beside its siblings loads as nothing and
-  reports nothing. Vitest runs through Vite, so `import.meta.glob` resolves in a
-  temporary test under `test/`: assert the engine and every child id come back
-  from `discoverAdminLogic()`, and that a runtime composed with no options shows
-  the area with all children active. Confirmed it fails as intended by renaming
-  one child file (3 failures), then restored and deleted the check. The permanent
-  child tests inject their definitions, so they can never catch this.
+- **Verify on-disk discovery with a throwaway test, every area slice.** Vitest
+  runs through Vite, so `import.meta.glob` resolves in a temporary test under
+  `test/`: assert the engine and every child id come back from
+  `discoverAdminLogic()`, and that a runtime composed with no options shows the
+  area with all children active. The permanent child tests inject their
+  definitions, so they can never catch this. Restored and deleted after each use.
+  **Corrected in S4** — the S3 note said the structure checker cannot see a
+  mis-suffixed child at all. Measured, it is narrower than that. Renaming
+  `materialsReadChild.ts` → `materialsRead.ts` DOES turn structure red, because
+  the new name matches no allowed glob. What slips through is a rename whose new
+  name matches a *different* allowed glob: `materialsReadHelper.test.ts` passes
+  structure AND typecheck AND the suite, while the child loads as nothing and
+  reports nothing. That is the case the throwaway test exists for, so it is still
+  required every area slice — just for a narrower reason than recorded.
 - **Carried from P2:** no UI vocabulary anywhere in logic (no label, route, icon,
   component) per LOGIC §5/§11. Diagnostic severity always derives from the single
   map in `diagnostics.ts`, never stated at a report site. Fan-in diagnostic
@@ -213,6 +218,60 @@ as `roadmap.md` requires.
   so `createAdminEngine` (slice 2) is where it belongs. `capabilityRegistry` is
   not exported from module-system; children get capabilities through their
   injected context.
+
+## Decisions locked during S4 (inventory part one)
+
+- **A shared write primitive may live in the area contracts file.** This is the
+  one exception to "a contracts file exports types, never behavior", and S5
+  depends on it, so do not "tidy" it away. `planStockMovement` and its two
+  helpers (`roundEntered`, `recomputeAverageUnitCost`) sit in
+  `inventoryContracts.ts` because all three write paths — the manual adjustment
+  in S4, and consumption and reversal in S5 — must share one set of invariants.
+  LOGIC §8 shows neither S5 child requiring a sibling capability, so
+  `stock-consumption` cannot depend on `stock-adjustment`; `plan.json` lists no
+  shared-helper slot inside an area; `packages/domain` is a closed phase. The
+  alternatives were cross-sibling imports (forbidden by the pattern) or three
+  copies of the invariants (how SOURCE got four low-stock rules). It stays pure —
+  no store, no I/O — and calls the domain for all arithmetic. **Open question for
+  the owner, tech-debt D10:** whether `plan.json` should gain a real slot before
+  S5 builds on this.
+- **Decide, then write. Never write, then validate.** `planStockMovement` returns
+  a complete `StockMovementCommit` — ledger row, balance row, and cost row — and
+  the store persists all three through one `commitMovement`. SOURCE's
+  `recordMovement` did the opposite: it pushed a zero-quantity balance row for a
+  new (ingredient, outlet) pair, THEN applied the delta, so a movement refused for
+  insufficient stock permanently created a row that had not existed, which changed
+  how that ingredient answered the low-stock filter afterwards. A failed write
+  altered query results. Every S5 write goes through the same primitive and
+  inherits this. Arithmetic is behavior and belongs in logic (LOGIC §3);
+  atomicity is a storage property and belongs to whoever owns the storage.
+- **One rule per question, chosen in favour of what the owner could see.** Four
+  live low-stock implementations disagreed about an ingredient with no balance
+  row. The badge said low, the filter hid it, the dashboard excluded it, the usage
+  report included it. Consolidated into `isLowStockLevel`, resolved the way the
+  badge behaved, because that was the visible behavior and keeping it means the
+  list still looks the way it looked. `hasBalanceRecord` preserves the
+  distinction the conflation destroyed — "never counted" is not "empty". Expect
+  more of these: when a rule has several copies, find which one the owner can
+  actually see before picking.
+- **Add a tie-break to every ordering.** Both read children sort, and both needed
+  one. Ingredient names are not unique (tech-debt D3), and the automated write
+  paths stamp every row of one order with an identical `occurredAt`, so the
+  ledger had no total order at all — the same audit history could present
+  differently on two machines. `localeCompare` on the id is arbitrary but stable.
+- **A read child re-applies the filters it asked the store for.** The port
+  promises nothing about honouring its query. `stock-movements` filters again
+  after reading, so a partially implemented adapter cannot make the ledger appear
+  to contain movements the caller excluded. Its test fixture deliberately ignores
+  the query to prove this.
+- **One rounding convention per runtime.** `roundEntered` uses the same
+  `Number.EPSILON` nudge as the domain's `roundMoney`. A test caught the naive
+  version rounding 1.005 down, which would have meant two places in one runtime
+  rounding one input differently — the same "two owners for one fact" failure as
+  a report site stating its own severity.
+- **`allowNegativeStock` stays unexposed.** The domain parameter exists and
+  defaults to false. No SOURCE caller ever set it, not even a test. Threading a
+  flag nobody uses would be inventing a feature, not porting one.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 
