@@ -37,6 +37,7 @@ import type {
   ParentEngineSnapshot,
 } from "./engineContracts";
 import { createCapabilityRegistry } from "./capabilityRegistry";
+import { createDiagnosticCollector } from "./diagnostics";
 import type { OperationResult } from "./operationResult";
 import { operationFailure, operationIssue, operationSuccess } from "./operationResult";
 
@@ -79,17 +80,29 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
   const states = new Map<LogicChildId, LogicChildState>();
   const unmet = new Map<LogicChildId, readonly CapabilityId[]>();
   const initializationOrder: LogicChildId[] = [];
-  const collected: Diagnostic[] = [];
   const listeners = new Set<() => void>();
+
+  /**
+   * De-duplication is OFF here on purpose. SOURCE de-duplicated within one
+   * registration attempt, where shape, graph, and capability validation could each
+   * surface the same problem. Every report site in this file is already distinct, so
+   * a repeated fingerprint means a genuine second occurrence — the same child failing
+   * teardown on a later lifecycle cycle, say — and swallowing it would hide a real
+   * event. Fan-in de-duplication belongs to the engine host that merges discovery,
+   * graph, and registry diagnostics (P3).
+   */
+  const collected = createDiagnosticCollector({
+    forwardTo: options.diagnostics,
+    deduplicate: false,
+  });
 
   const capabilities = createCapabilityRegistry();
   const ports = options.ports ?? NO_PORTS;
   let disposed = false;
 
-  /** Records a diagnostic locally and forwards it to the host's sink. */
-  function report(diagnostic: Diagnostic): void {
-    collected.push(diagnostic);
-    options.diagnostics?.report(diagnostic);
+  /** Records a diagnostic and forwards it to the host's sink, de-duplicated. */
+  function report(entry: Diagnostic): void {
+    collected.report(entry);
   }
 
   const diagnostics: DiagnosticSink = { report };
@@ -397,7 +410,7 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       status: runtimeStatus(),
       engines: [...engines.values()].map(engineSnapshot),
       capabilities: capabilities.list(),
-      diagnostics: [...collected],
+      diagnostics: collected.list(),
       initializationOrder: [...initializationOrder],
     };
   }
