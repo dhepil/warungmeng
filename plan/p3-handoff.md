@@ -8,6 +8,13 @@ otherwise be lost when context is compacted. It is notes, not authority:
 progress. Keep it current — update the slice table and append to the decisions
 list as part of each slice, before committing.
 
+**Where a decision goes.** A decision that shapes how the code is built belongs
+here. Something we knowingly left imperfect belongs in `plan/tech-debt.md` — if
+you preserve behavior you believe is wrong, or take a shortcut a later phase must
+live with, write it there in the same slice. S3 opened D1-D9; D1 (stale variant
+links after a delete) and D2 (unchecked `categoryId`) are the two the owner still
+has to decide, and they should be answered together.
+
 ---
 
 ## Slice plan (owner-approved, 13 slices)
@@ -170,7 +177,9 @@ as `roadmap.md` requires.
   `"unavailable"` instead of the requested value. Left alone: deleting a menu or
   a group strips no `variantGroupIds`, so dangling links survive and only POS
   notices at read time — cleanup would be a new rule and a second writer over
-  menus. If a later area wants it, decide it there, in the open.
+  menus. That one is `tech-debt.md` **D1**, still open and awaiting the owner;
+  decide it together with **D2** (nothing checks a `categoryId` exists), since
+  both ask the same question about referential rules.
 - **A non-atomic multi-step write reports its partial outcome.** Saving a variant
   group writes the group, then N menus. It stays non-atomic — LOGIC §10 scopes
   the atomic port to order cancellation and POS checkout, and promoting this

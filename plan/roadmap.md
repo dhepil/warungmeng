@@ -5,6 +5,11 @@ exactly where we are and what comes next. `plan.json` is the authority for exact
 file paths; this file is the authority for **order** and **progress**. If they ever
 disagree on *where a file goes*, `plan.json` wins.
 
+`plan/tech-debt.md` holds what we knowingly left imperfect and why. Add an entry
+there when you preserve something you believe is wrong, or take a shortcut a later
+phase must live with — it is what keeps "SOURCE did it this way" from turning into
+nobody remembering we noticed.
+
 **Rule for the working agent:** finish a slice → `npm run check` green → commit →
 append to `porting-log.md` → tick the box below → STOP and report. One slice per go.
 
