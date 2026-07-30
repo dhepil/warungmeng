@@ -25,6 +25,7 @@ import type {
   ParentEngineDefinition,
 } from "./engineContracts";
 import { isNamespacedId } from "./engineContracts";
+import { severityForCode } from "./diagnostics";
 
 /** An unvalidated thing found by discovery, with where it came from. */
 export interface DiscoveryCandidate {
@@ -53,7 +54,12 @@ function isIdArray(value: unknown): boolean {
 }
 
 function malformed(source: string, message: string): Diagnostic {
-  return { code: "definition-malformed", severity: "error", message, source };
+  return {
+    code: "definition-malformed",
+    severity: severityForCode("definition-malformed"),
+    message,
+    source,
+  };
 }
 
 /** A parent engine: namespaced id, supported version, non-empty namespace. */
@@ -109,7 +115,7 @@ export function discoverDefinitions(
       if (value.version !== 1) {
         const issue: Diagnostic = {
           code: "unsupported-version",
-          severity: "error",
+          severity: severityForCode("unsupported-version"),
           message: "Logic child version is not supported.",
           childId: value.id,
           engineId: value.parentId,
@@ -127,7 +133,7 @@ export function discoverDefinitions(
       if (value.version !== 1) {
         const issue: Diagnostic = {
           code: "unsupported-version",
-          severity: "error",
+          severity: severityForCode("unsupported-version"),
           message: "Parent engine version is not supported.",
           engineId: value.id,
           source,

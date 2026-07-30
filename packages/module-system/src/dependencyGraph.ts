@@ -24,6 +24,7 @@ import type {
   LogicChildId,
   ParentEngineDefinition,
 } from "./engineContracts";
+import { severityForCode } from "./diagnostics";
 
 /** What the graph concluded. `order` only includes children that may safely run. */
 export interface DependencyGraphResult {
@@ -58,7 +59,7 @@ function diagnostic(
   engineId?: EngineId,
   details?: Diagnostic["details"],
 ): Diagnostic {
-  return { code, severity: "error", message, childId, engineId, details };
+  return { code, severity: severityForCode(code), message, childId, engineId, details };
 }
 
 /**

@@ -29,13 +29,13 @@ Port from SOURCE domain/business logic. No React, no adapters, no I/O.
 - [ ] S7 (optional) domain tidy pass — reduce/clarify code with S6 tests green as the safety net. No behavior change; check must stay green. Skippable.
 Gate to done: all P1 `exact` files exist, tests + `npm run check` green.
 
-## P2 — packages/module-system (generic runtime, zero deps)  `[~]`
+## P2 — packages/module-system (generic runtime, zero deps)  `[x]`
 Engine host + capability wiring. No domain knowledge, no browser globals.
 - [x] S1 `operationResult.ts` + `engineContracts.ts` (types first)
 - [x] S2 `engineRegistry.ts` + `capabilityRegistry.ts`
 - [x] S3 `dependencyGraph.ts` + `discovery.ts`
 - [x] S4 `diagnostics.ts`
-- [ ] S5 `index.ts` + `moduleSystem.test.ts`
+- [x] S5 `index.ts` + `moduleSystem.test.ts`
 
 ## P3 — packages/admin-engine (admin headless logic)  `[ ]`
 Depends on domain + module-system. MUST NOT import storefront-engine or React.
@@ -76,6 +76,8 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 
 ## Progress notes
 (latest at top — agent appends one line when a slice or phase changes state)
+- **P2 DONE** — phase closed, status flipped in plan.json. All 11 planned module-system files exist; 51 permanent tests + 17 domain tests green.
+- P2 S5 done — index.ts (hand-picked public exports, matching SOURCE's barrel style; capabilityRegistry deliberately NOT exported — it is the staging seam the engine registry owns, and a host publishing behind its back would break staged rollback) + moduleSystem.test.ts (51 permanent tests consolidated from SOURCE's 5 suites, written against the public barrel so a missing export fails the suite). Dropped SOURCE's moduleSurfaceBoundary suite: it re-implemented an import scanner inside a test, and `npm run check` already enforces that rule for every package — a second owner is drift. Finished the S4 severity correction: the leftover hardcoded "warning" in engineRegistry is gone and all three files now derive severity from the one map, so no report site can state its own. Mutation-checked the two load-bearing tests (softened a code to warning; leaked the snapshot array) — both caught. Typecheck also caught a readonly-cast the tests could not. Checks green, committed 3c1ca94.
 - P2 S4 done — diagnostics.ts (collector with grouping by child/engine, severity filter, summary with fatal signal, optional de-duplication). Ported SOURCE's collector plus the dedupe filter SOURCE had inlined in createModuleRegistry. Registry now collects through it (dedupe off — its report sites are already distinct; fan-in dedupe belongs to the P3 host). Corrected my own invention mid-slice: I had made missing-dependency a warning, but SOURCE marks every code an error and "may we continue" is already carried by the degraded status — two owners for one fact is drift, so severity stays uniform. Verified 17 behaviors with a temporary suite (deleted; permanent tests are S5). Checks green, committed 8f76975.
 - P0 done — harness committed, all checks green on empty repo.
 - P1 S1 done — catalog.ts ported (types + validation + variant rules consolidated), domain scaffold added, checks green, committed 0800e8f.

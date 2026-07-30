@@ -14,7 +14,7 @@
       "id": "P2-module-system",
       "title": "Generic module runtime",
       "package": "packages/module-system",
-      "status": "active",
+      "status": "done",
       "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/module-system"
     },
     {

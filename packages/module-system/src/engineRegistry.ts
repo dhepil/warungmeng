@@ -37,7 +37,7 @@ import type {
   ParentEngineSnapshot,
 } from "./engineContracts";
 import { createCapabilityRegistry } from "./capabilityRegistry";
-import { createDiagnosticCollector } from "./diagnostics";
+import { createDiagnosticCollector, diagnostic } from "./diagnostics";
 import type { OperationResult } from "./operationResult";
 import { operationFailure, operationIssue, operationSuccess } from "./operationResult";
 
@@ -100,7 +100,7 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
   const ports = options.ports ?? NO_PORTS;
   let disposed = false;
 
-  /** Records a diagnostic and forwards it to the host's sink, de-duplicated. */
+  /** Records a diagnostic and forwards it to the host's sink. */
   function report(entry: Diagnostic): void {
     collected.report(entry);
   }
@@ -121,12 +121,9 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
         "A parent engine with this id is already registered.",
         definition.id,
       );
-      report({
-        code: "duplicate-engine-id",
-        severity: "error",
-        message: issue.message,
-        engineId: definition.id,
-      });
+      report(
+        diagnostic("duplicate-engine-id", issue.message, { engineId: definition.id }),
+      );
       return operationFailure("conflict", [issue]);
     }
 
@@ -142,13 +139,12 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
         "A logic child with this id is already registered.",
         definition.id,
       );
-      report({
-        code: "duplicate-child-id",
-        severity: "error",
-        message: issue.message,
-        engineId: definition.parentId,
-        childId: definition.id,
-      });
+      report(
+        diagnostic("duplicate-child-id", issue.message, {
+          engineId: definition.parentId,
+          childId: definition.id,
+        }),
+      );
       return operationFailure("conflict", [issue]);
     }
 
@@ -176,14 +172,14 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       unmet.set(definition.id, unmetRequirements);
       states.set(definition.id, "unavailable");
       for (const capabilityId of unmetRequirements) {
-        report({
-          code: "missing-dependency",
-          severity: "warning",
-          message: "Child is unavailable because a required capability is not active.",
-          engineId: definition.parentId,
-          childId: definition.id,
-          details: { capabilityId },
-        });
+        report(
+          diagnostic(
+            "missing-dependency",
+            "Child is unavailable because a required capability is not active.",
+            { engineId: definition.parentId, childId: definition.id },
+            { capabilityId },
+          ),
+        );
       }
       return false;
     }
@@ -202,13 +198,12 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       scope.rollback();
       unmet.set(definition.id, []);
       states.set(definition.id, "failed");
-      report({
-        code: "initialization-failed",
-        severity: "error",
-        message: "Child threw while being created.",
-        engineId: definition.parentId,
-        childId: definition.id,
-      });
+      report(
+        diagnostic("initialization-failed", "Child threw while being created.", {
+          engineId: definition.parentId,
+          childId: definition.id,
+        }),
+      );
       return false;
     }
 
@@ -218,14 +213,14 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       unmet.set(definition.id, []);
       states.set(definition.id, "failed");
       for (const conflict of conflicts) {
-        report({
-          code: "duplicate-capability",
-          severity: "error",
-          message: conflict.message,
-          engineId: definition.parentId,
-          childId: definition.id,
-          details: { capabilityId: conflict.subject ?? null },
-        });
+        report(
+          diagnostic(
+            "duplicate-capability",
+            conflict.message,
+            { engineId: definition.parentId, childId: definition.id },
+            { capabilityId: conflict.subject ?? null },
+          ),
+        );
       }
       return false;
     }
@@ -241,17 +236,16 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       scope.rollback();
       unmet.set(definition.id, []);
       states.set(definition.id, "failed");
-      report({
-        code: "initialization-failed",
-        severity: "error",
-        message:
+      report(
+        diagnostic(
+          "initialization-failed",
           undeclared !== undefined
             ? "Child published an undeclared capability."
             : "Child did not publish a declared capability.",
-        engineId: definition.parentId,
-        childId: definition.id,
-        details: { capabilityId: undeclared ?? unpublished ?? null },
-      });
+          { engineId: definition.parentId, childId: definition.id },
+          { capabilityId: undeclared ?? unpublished ?? null },
+        ),
+      );
       return false;
     }
 
@@ -260,14 +254,14 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       unmet.set(definition.id, []);
       states.set(definition.id, "failed");
       for (const issue of commit.issues) {
-        report({
-          code: "duplicate-capability",
-          severity: "error",
-          message: issue.message,
-          engineId: definition.parentId,
-          childId: definition.id,
-          details: { capabilityId: issue.subject ?? null },
-        });
+        report(
+          diagnostic(
+            "duplicate-capability",
+            issue.message,
+            { engineId: definition.parentId, childId: definition.id },
+            { capabilityId: issue.subject ?? null },
+          ),
+        );
       }
       return false;
     }
@@ -341,13 +335,12 @@ export function createEngineRegistry(options: EngineRegistryOptions = {}): Engin
       try {
         void registration.dispose();
       } catch {
-        report({
-          code: "disposal-failed",
-          severity: "error",
-          message: "Capability disposal failed.",
-          engineId: entry.definition.parentId,
-          childId: id,
-        });
+        report(
+          diagnostic("disposal-failed", "Capability disposal failed.", {
+            engineId: entry.definition.parentId,
+            childId: id,
+          }),
+        );
       }
     }
 
