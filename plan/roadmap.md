@@ -34,7 +34,7 @@ Engine host + capability wiring. No domain knowledge, no browser globals.
 - [x] S1 `operationResult.ts` + `engineContracts.ts` (types first)
 - [x] S2 `engineRegistry.ts` + `capabilityRegistry.ts`
 - [x] S3 `dependencyGraph.ts` + `discovery.ts`
-- [ ] S4 `diagnostics.ts`
+- [x] S4 `diagnostics.ts`
 - [ ] S5 `index.ts` + `moduleSystem.test.ts`
 
 ## P3 — packages/admin-engine (admin headless logic)  `[ ]`
@@ -76,6 +76,7 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 
 ## Progress notes
 (latest at top — agent appends one line when a slice or phase changes state)
+- P2 S4 done — diagnostics.ts (collector with grouping by child/engine, severity filter, summary with fatal signal, optional de-duplication). Ported SOURCE's collector plus the dedupe filter SOURCE had inlined in createModuleRegistry. Registry now collects through it (dedupe off — its report sites are already distinct; fan-in dedupe belongs to the P3 host). Corrected my own invention mid-slice: I had made missing-dependency a warning, but SOURCE marks every code an error and "may we continue" is already carried by the degraded status — two owners for one fact is drift, so severity stays uniform. Verified 17 behaviors with a temporary suite (deleted; permanent tests are S5). Checks green, committed 8f76975.
 - P0 done — harness committed, all checks green on empty repo.
 - P1 S1 done — catalog.ts ported (types + validation + variant rules consolidated), domain scaffold added, checks green, committed 0800e8f.
 - P1 S2 done — orders.ts ported (types + status transitions consolidated), imports Money from ./catalog, checks green.
