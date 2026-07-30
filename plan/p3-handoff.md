@@ -19,8 +19,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 |---|---|---|
 | 1 | scaffold + `adminEngineContracts` + `adminEngineSnapshot` + `shared/atomicOperationPort` | done — 0e70323 |
 | 2 | `createAdminEngine` + `discoverAdminLogic` + `index` | done — d32dba3 |
-| 3 | menu — catalog-read, menu-editor, variant-management | next |
-| 4 | inventory A — materials-read, stock-movements, stock-adjustment | |
+| 3 | menu — catalog-read, menu-editor, variant-management | done — 69b560d, d14ffb5, 8513852 |
+| 4 | inventory A — materials-read, stock-movements, stock-adjustment | next |
 | 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | |
 | 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | |
 | 7 | orders — order-read, order-submission | |
@@ -113,6 +113,90 @@ as `roadmap.md` requires.
   consumer really is initialized and the registry reports the unmet requirement
   once per `requires` entry. If a future test asserts "reported once", first
   assert the raw duplicate exists upstream.
+- **An area slice may land as several green commits.** S3 shipped as three
+  (scaffold+read, editor, variants). The plan decides where files go and in what
+  order areas are built; it does not fix how many commits a slice takes, and
+  `plan.json` permits a partial area — the `engines/*` entries are `allow` globs,
+  not `exact`, so a menu area with one child passes all four checks. Completeness
+  is slice 13's job. Each commit was green before it landed, so each is a
+  fallback point; the log, roadmap and handoff are still updated once, at the end
+  of the slice. Later area slices should do the same — one child per commit.
+- **Every child gets its store from the injected port, not from a sibling.** All
+  three menu children resolve `MENU_CATALOG_PORT` themselves. That is forced:
+  LOGIC §8 shows no menu child requiring anything, so `menu-editor` cannot depend
+  on `catalog-read`. Consequence to expect in every later area — the store is the
+  single writer of record with several callers, exactly as in SOURCE.
+- **A missing port is not an unavailable child.** With no store supplied, the
+  children still load, still publish, and answer every call with a normalized
+  failure carrying a `no-catalog-store` issue, plus ONE `missing-dependency`
+  diagnostic reported at creation rather than per call. `unavailable` is reserved
+  for its real meaning: a required capability nobody published. A child that
+  vanished because its adapter was absent would be indistinguishable from one
+  never written.
+- **Ordering belongs to the read child, not the store.** SOURCE sorted inside its
+  in-memory repository (`sortOrder`, then `name.localeCompare`), so a different
+  adapter would have silently changed the order menus appear in. Ordering is a
+  promise the engine makes, so `catalog-read` sorts its own results and the port
+  promises no order at all.
+- **Count projections relax exactly one filter dimension.** Category counts ignore
+  the selected category; availability counts ignore the selected availability;
+  both keep every other dimension applied. Selecting one value must not zero out
+  the others' counts. Absent key means zero. Mutation-tested — and note the
+  matching consequence, that `totalCount` is the total *within* the selected
+  category, not the catalog.
+- **Capability id = child id, except where LOGIC names one.** `admin.menu.catalog-read`
+  is written in LOGIC §8 and used verbatim. Nothing in the doc names the other
+  two, so they take their child ids (`admin.menu.menu-editor`,
+  `admin.menu.variant-management`). Slightly repetitive, but it invents nothing
+  and a reader can always predict the id. LOGIC does name `admin.orders.cancel`
+  for the cancellation child, so orders will not follow this default — use the
+  doc's id wherever the doc states one.
+- **Rules that lived only in a form move into logic.** Menu name ≤120,
+  description ≤500, category and variant-group names ≤80, variant option name
+  ≤80, "a group keeps at least one option". SOURCE enforced these as `maxLength`
+  attributes and a disabled button, so anything not going through that one form
+  skipped them, and the P5 UI rebuild would have had to rediscover them. LOGIC
+  §13 puts validation below the screen. **Expect more of these in every area —
+  look for `rules={[...]}`, `maxLength`, `min=`, and `disabled=` in SOURCE
+  components before declaring an area ported.**
+- **The baseline is re-read at save time.** SOURCE captured it in screen state at
+  mount, so a slug or `compareAtPrice` changed elsewhere could be overwritten on
+  save. One extra read removes the class of problem; do the same in every editor.
+- **Two real defects fixed, one left alone deliberately.** Fixed: the inline
+  option delete never consulted the selection rule, so it could leave a group
+  demanding more selections than it had options (and turning an option OFF can
+  break the same rule, because the rule is judged against AVAILABLE options —
+  guarded too). Fixed: the variant filter compared against the literal
+  `"unavailable"` instead of the requested value. Left alone: deleting a menu or
+  a group strips no `variantGroupIds`, so dangling links survive and only POS
+  notices at read time — cleanup would be a new rule and a second writer over
+  menus. If a later area wants it, decide it there, in the open.
+- **A non-atomic multi-step write reports its partial outcome.** Saving a variant
+  group writes the group, then N menus. It stays non-atomic — LOGIC §10 scopes
+  the atomic port to order cancellation and POS checkout, and promoting this
+  would widen a deliberately narrow guarantee. But every menu is attempted even
+  after one fails, and the result is `degraded` naming the failed menu ids;
+  SOURCE threw on the first, leaving the rest unattempted behind one generic
+  error. Use `operationDegraded` for this shape, not a bespoke union.
+- **Bespoke result unions fold into `OperationResult`.** SOURCE's
+  `DeleteMenuCategoryResult` (`deleted` | `in-use` | `not-found`) became
+  success / `conflict` carrying the count in `issues[0].details` / `not-found`.
+  One result shape for the whole runtime (LOGIC §5); a second vocabulary per area
+  is drift.
+- **Tests reach a capability through a probe child, never `create()` directly.**
+  Each child test composes a real runtime and adds a throwaway child that declares
+  the capability in `requires` and captures it from its context — the same path
+  inventory HPP and POS checkout will use. A direct `create()` call would pass
+  even if the capability were published under the wrong id. Copy this helper.
+- **Verify on-disk discovery with a throwaway test, every area slice.** The
+  structure checker catches a misplaced file but NOT a mis-suffixed one in an
+  allowed folder — `catalogRead.ts` beside its siblings loads as nothing and
+  reports nothing. Vitest runs through Vite, so `import.meta.glob` resolves in a
+  temporary test under `test/`: assert the engine and every child id come back
+  from `discoverAdminLogic()`, and that a runtime composed with no options shows
+  the area with all children active. Confirmed it fails as intended by renaming
+  one child file (3 failures), then restored and deleted the check. The permanent
+  child tests inject their definitions, so they can never catch this.
 - **Carried from P2:** no UI vocabulary anywhere in logic (no label, route, icon,
   component) per LOGIC §5/§11. Diagnostic severity always derives from the single
   map in `diagnostics.ts`, never stated at a report site. Fan-in diagnostic
@@ -121,10 +205,26 @@ as `roadmap.md` requires.
   not exported from module-system; children get capabilities through their
   injected context.
 
-## Notes for slice 3 specifically
+## The area-slice pattern (established by slice 3 — copy it)
 
-Slice 3 is the FIRST real area, so it sets the pattern every later area slice
-copies. Getting the shape right matters more than getting it done fast.
+Slice 3 built the first real area, so its shape is the template. In order:
+
+1. Extend `<area>Contracts.ts` with the capability token(s), the outbound port
+   the area needs, and the area's own input/output shapes. Domain types are
+   imported, never redefined.
+2. Write `<area>Engine.ts` — identity only, no child imports, default export.
+3. One child per commit: `<feature>Child.ts` + `<feature>.test.ts`, each child
+   resolving the port itself and publishing exactly what it declares in
+   `provides`. `npm run check` green before each commit.
+4. Mutation-check the load-bearing tests: break the behavior, confirm the test
+   fails, restore, `diff` against the backup. S3 ran 18 mutations across three
+   children, all caught.
+5. Verify on-disk discovery with a throwaway test under `test/`, confirm it fails
+   when a child file is mis-suffixed, then delete it.
+6. Update roadmap + porting-log + this file, then STOP and report.
+
+Notes below were written before slice 3 and are kept because they still describe
+the mechanics every area slice faces.
 
 - **The engine room is finished and verified end to end.** Discovery already
   finds a real area from disk with nothing injected (proved with a scratch area,
