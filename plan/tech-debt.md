@@ -374,28 +374,6 @@ since it needs a `plan.json` slot for the new child.
 
 ---
 
-## D17 — `package-lock.json` carries an unexplained uncommitted change · `open`
-
-**Found:** P3 S4, present at session start and untouched throughout.
-
-The working tree has `package-lock.json` modified — 3 lines added, 56 removed,
-dropping some optional/peer `@emnapi/*` entries. It predates this slice; no S4
-commit includes it, and all four checks are green with it in place.
-
-**Why it was left:** it is not product code and it is not this slice's work.
-Folding an unexplained dependency-graph change into a feature commit would make
-that commit describe something it did not do.
-
-**What it costs to fix:** either commit it on its own once someone can say what
-produced it (most likely an `npm install` on a different Node or platform), or
-`git checkout package-lock.json` to discard it. Both are one command; the decision
-is which.
-
-**What it costs to leave:** every future session starts with a dirty tree, so
-"working tree clean" stops being a usable signal that nothing unexpected happened.
-
----
-
 ## D18 — An unpaid order that consumed stock never gets it back · `open`
 
 **Found:** P3 S5, from the scout's read of SOURCE's cancellation command.
