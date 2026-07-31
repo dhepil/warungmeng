@@ -66,6 +66,9 @@ function storeOver(rows: readonly Order[]): OrdersStorePort {
     submitOrder: async () => {
       throw new Error("write path not used by order-read");
     },
+    cancelOrder: async () => {
+      throw new Error("write path not used by order-read");
+    },
   };
 }
 

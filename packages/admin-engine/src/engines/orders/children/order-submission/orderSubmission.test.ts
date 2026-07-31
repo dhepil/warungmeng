@@ -82,6 +82,10 @@ function input(overrides: Partial<SubmitOrderInput> = {}): SubmitOrderInput {
   };
 }
 
+const cancelNotUsed: OrdersStorePort["cancelOrder"] = async () => {
+  throw new Error("cancel path not used by order-submission");
+};
+
 function storedOrder(orderRecord = record(), id = "order-1"): Order {
   return { ...orderRecord, id };
 }
@@ -210,6 +214,7 @@ describe("the child in a real runtime", () => {
       listOrders: async () => rows,
       getOrderById: async (id) => rows.find((entry) => entry.id === id) ?? null,
       submitOrder,
+      cancelOrder: cancelNotUsed,
     };
     const { submission, dispose } = runtimeWith(store);
 
@@ -236,6 +241,7 @@ describe("the child in a real runtime", () => {
       listOrders: async () => [],
       getOrderById: async () => null,
       submitOrder,
+      cancelOrder: cancelNotUsed,
     });
 
     const result = await submission?.submitOrder(input({ order: record({ items: [] }) }));
@@ -254,6 +260,7 @@ describe("the child in a real runtime", () => {
       listOrders: async () => [existing],
       getOrderById: async (id) => (id === existing.id ? existing : null),
       submitOrder,
+      cancelOrder: cancelNotUsed,
     });
 
     const result = await submission?.submitOrder(input());
@@ -277,6 +284,7 @@ describe("the child in a real runtime", () => {
         order: existing,
         message: "Idempotency key already belongs to another payload",
       }),
+      cancelOrder: cancelNotUsed,
     };
     const { submission: conflict, dispose: disposeConflict } = runtimeWith(conflictStore);
 
@@ -295,6 +303,7 @@ describe("the child in a real runtime", () => {
       submitOrder: async () => {
         throw new Error("create order timed out");
       },
+      cancelOrder: cancelNotUsed,
     };
     const { submission: failing, dispose: disposeFailing } = runtimeWith(failingStore);
     const failed = await failing?.submitOrder(input());

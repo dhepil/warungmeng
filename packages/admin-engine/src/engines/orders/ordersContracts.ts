@@ -5,10 +5,10 @@
 // shapes. `Order` and its nested vocabulary come from the domain and are never
 // restated here.
 //
-// Cancellation is deliberately absent. Slice 8 adds its contract and atomic
-// workflow without widening either S7 child into a multi-owner operation.
+// Cancellation arrived in S8 as its own capability and atomic workflow; neither S7
+// child was widened into a multi-owner operation to accommodate it.
 
-import type { Order, OrderChannel, OrderStatus } from "@warungmeng/domain";
+import type { FinanceTransaction, Money, Order, OrderChannel, OrderStatus } from "@warungmeng/domain";
 import type { OperationResult } from "@warungmeng/module-system";
 import { createCapabilityToken, createOutboundPortToken } from "@warungmeng/module-system";
 
@@ -37,6 +37,23 @@ export type OrderSubmissionRecord = Omit<Order, "id">;
  * identity and created a duplicate on every repeated call; making the key explicit
  * closes that hole without moving POS/cart/inventory/finance orchestration here.
  * The store is the authoritative replay judge — a child-side pre-read would race.
+ *
+ * `cancelOrder` is the store's authoritative status write, and it is deliberately
+ * narrow: it cancels, and it cannot do anything else. SOURCE published a general
+ * `updateStatus(orderId, status)` that accepted `"cancelled"` too, wired straight to
+ * the repository — so the whole multi-owner cancellation workflow could be bypassed
+ * by one call, flipping a paid order to cancelled/refunded with no stock reversal and
+ * outside any transaction. SOURCE's own comment claimed `cancel` was "the single
+ * active cancellation command" while that sibling contradicted it, and the invariant
+ * survived only because one screen filtered `"cancelled"` out of its button list. A
+ * capability is not allowed to depend on a screen for its correctness, so the door
+ * does not exist here. Forward progression (`new → accepted → …`) has no target
+ * child at all yet — tech-debt D28, not something to smuggle in through a general
+ * status setter.
+ *
+ * The store computes the transition itself and answers authoritatively, exactly as
+ * Finance's writes do: no child-side pre-read, because a read-then-write is both a
+ * second judge and a race.
  */
 export interface OrdersStorePort {
   listOrders(): Promise<readonly Order[]>;
@@ -45,7 +62,20 @@ export interface OrdersStorePort {
     idempotencyKey: string,
     record: OrderSubmissionRecord,
   ): Promise<OrderSubmissionCommit>;
+  cancelOrder(orderId: string): Promise<OrderCancellationCommit>;
 }
+
+/**
+ * What the store reports back from a cancellation attempt.
+ *
+ * `invalid-transition` carries the unchanged order so a caller can say *why* it was
+ * refused (already cancelled, or completed) instead of showing a bare error, which is
+ * the one thing SOURCE's shape got right and is kept.
+ */
+export type OrderCancellationCommit =
+  | { readonly status: "cancelled"; readonly order: Order }
+  | { readonly status: "not-found" }
+  | { readonly status: "invalid-transition"; readonly order: Order };
 
 export type OrderSubmissionCommit =
   | { readonly status: "created"; readonly order: Order }
@@ -122,3 +152,62 @@ export interface OrderSubmission {
 export const ORDER_SUBMISSION_ID = "admin.orders.order-submission";
 export const ORDER_SUBMISSION =
   createCapabilityToken<OrderSubmission>(ORDER_SUBMISSION_ID);
+
+// ─── Cancellation contracts (child: order-cancellation) ───────────────────────
+
+export const CANCELLATION_ISSUE = {
+  invalidOrderId: "invalid-order-id",
+  notFound: "order-not-found",
+  invalidTransition: "order-not-cancellable",
+  alreadyCancelled: "order-already-cancelled",
+  storeFailed: "orders-store-failed",
+  noStore: "no-orders-store",
+  reversalFailed: "stock-reversal-failed",
+  atomicFailed: "atomic-operation-failed",
+} as const;
+
+/**
+ * What a completed cancellation actually did, across all three owners.
+ *
+ * `stockReturned` and `refundOwed` are reported SEPARATELY and on purpose. This is
+ * the whole of tech-debt D18: SOURCE decided whether to return stock by asking the
+ * FINANCE projection — `projectRefund(order).length > 0` — which reduces to "was this
+ * order paid", because the domain only settles `paid → refunded` on cancellation. A
+ * money fact was answering a stock question. The consequence was silent and
+ * one-directional: an UNPAID order that had consumed stock was cancelled and never
+ * got the stock back, so inventory drifted permanently low, which is what raises
+ * false low-stock warnings and drives over-ordering.
+ *
+ * The owner decided on 2026-07-31 to return stock whenever it was actually deducted.
+ * So the reversal is now attempted for every cancellation and the reversal capability
+ * — which already knows authoritatively whether this order consumed anything — is the
+ * only judge of whether there is stock to give back. The refund projection is still
+ * produced, because a cancelled paid order really does owe money, but it decides
+ * nothing. It is an output, never a gate.
+ *
+ * `stockAlreadyReturned` and `refundOwed` let a caller tell the four real endings
+ * apart — returned now, returned earlier, nothing to return, and money owed — where
+ * SOURCE had a single boolean that meant "was paid" and was displayed as though it
+ * meant "stock came back".
+ */
+export interface OrderCancellationOutcome {
+  readonly order: Order;
+  /** True when this call wrote reversal rows; false when there was nothing to return. */
+  readonly stockReturned: boolean;
+  /** True when the stock had already been returned by an earlier attempt. */
+  readonly stockAlreadyReturned: boolean;
+  /** Derived from the settled order. Reporting only — it never gates the reversal. */
+  readonly refundOwed: boolean;
+  readonly refundTotal: Money;
+  readonly refundTransactions: readonly FinanceTransaction[];
+}
+
+export interface OrderCancellation {
+  cancelOrder(orderId: string): Promise<OperationResult<OrderCancellationOutcome>>;
+}
+
+/** LOGIC §8 names this capability `admin.orders.cancel`, not the child id. */
+export const ORDER_CANCEL_ID = "admin.orders.cancel";
+export const ORDER_CANCEL = createCapabilityToken<OrderCancellation>(ORDER_CANCEL_ID);
+
+export const ORDER_CANCELLATION_CHILD_ID = "admin.orders.order-cancellation";
