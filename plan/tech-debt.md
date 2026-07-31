@@ -491,7 +491,7 @@ constant.
 
 ---
 
-## D23 — POS is required to call a finance writer SOURCE never called · `open`
+## D23 — POS is required to call a finance writer SOURCE never called · `resolved`
 
 **Found:** P3 S6, while mapping the finance capability graph. **Slice 10.**
 
@@ -516,6 +516,26 @@ it must reconcile the graph edge with the derived-ledger design.
 derived and make the capability acknowledge/project the committed order rather
 than store a duplicate, but verify that against the atomic checkout contract before
 coding. The operation must report fresh versus replayed if it can be retried.
+
+**RESOLVED in P3 S10 — the strong default held.** The sale stays derived. Checkout
+declares and resolves `admin.finance.transaction-recording` exactly as LOGIC §8
+requires, so the graph edge is honest and the child is correctly excluded when
+Finance is absent, but it never calls the manual writer — there is no second writer
+for one fact and no de-duplication to keep load-bearing. What checkout does instead
+is *verify* the derivation before it finalizes the till: it projects the committed
+order and requires exactly one row of type `sale`, rolling the whole checkout back
+otherwise. No new method was invented on the capability, so `transaction-recording`
+still owns only SOURCE's manual create/edit/void behavior.
+
+Why the verification is not defensive padding: checkout stamps `paid`, but the store
+returns the STORED order, and on an idempotent replay that order may have been
+cancelled since it was written — the domain settles `paid → refunded` on
+cancellation, and a refunded order projects TWO rows (sale + refund). Deriving the
+till's sale from that would book a refund the cash drawer never paid out, which is
+precisely the ledger/till disagreement this entry was opened to prevent. The guard
+is mutation-tested through the real runtime in S10c: a test that calls the domain
+projection directly passes with or without the guard and is therefore worthless
+here, which is how the gap was found in the first place.
 
 ---
 
