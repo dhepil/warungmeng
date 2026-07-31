@@ -304,41 +304,6 @@ forbidding them.
 
 ---
 
-## D15 — The dashboard reaches into inventory's store shape, not its capability · `open`
-
-**Found:** P3 S4, from the scout's sweep for second consumers. **Decide by S11.**
-
-SOURCE's dashboard declares its own `Pick<InventoryRepository, "listIngredients" |
-"listStockBalances" | "listMovements" | "listRecipes" | "calculateHpp">` inside the
-dashboard feature — a structural slice of the inventory *repository*, not the
-inventory feature's own read capability. So two competing definitions of
-"inventory read" overlap on five methods, and neither knows about the other. Its
-loader also calls `listIngredients()` with no query at all, so it includes archived
-ingredients and relies on downstream status filters.
-
-**Why it is not fixed yet:** the dashboard is slice 11 and does not exist here yet.
-S4 did the part it could — `materials-read` and `stock-movements` publish plain
-`listIngredients` / `listSuppliers` / `listStockBalances` / `listMovements`
-returning raw domain entities precisely so the dashboard has a real capability to
-come through, which is why those methods exist alongside the joined list queries.
-LOGIC §8 confirms the intent: `admin.dashboard.overview` requires
-`admin.inventory.materials-read`, and `admin.dashboard.reports` requires
-`admin.inventory.stock-movements`.
-
-**What it costs to fix:** nothing extra, if slice 11 resolves the two capabilities
-instead of re-deriving a store shape. The debt is only that nothing yet *forces*
-it — an agent building the dashboard could reintroduce a structural Pick and every
-check would stay green.
-
-**What it costs to leave:** two definitions of the same read surface drift, and the
-boundary rule "a gate must not import a repository" is satisfied in letter while
-being violated in spirit.
-
-**Action for S11:** resolve the capabilities. Do not declare a structural type over
-`InventoryStorePort`.
-
----
-
 ## D16 — No recipe WRITE path, and no child owns recipe editing · `open`
 
 **Found:** P3 S4 as "recipes are not on the port at all". **Half resolved in S5**:
@@ -434,29 +399,33 @@ the selling price yields a negative percentage with no label saying "loss-making
 
 ---
 
-## D20 — Dashboard COGS restates history every time a cost moves · `open`
+## D20 — Historical dashboard COGS needs movement-to-menu attribution · `open, narrowed in P3 S11`
 
 **Found:** P3 S5, from the scout's sweep for HPP consumers. **Slice 11.**
 
-The dashboard multiplies **today's** HPP — derived from today's average unit cost —
-against **historical** order quantities. So every purchase that moves an average
-silently rewrites past cost-of-goods and past gross margin. Last month's profit
-figure changes because someone bought flour today.
+SOURCE multiplied **today's** HPP—derived from today's average ingredient cost—by
+historical order quantities. A later purchase could therefore rewrite an earlier
+month's COGS and gross margin.
 
-**Why it is not fixed here:** it is the dashboard's computation, and the dashboard
-is slice 11. Inventory supplies the cost; what the dashboard does across time is
-its own decision.
+**What S11 fixed:** stock-consumption now snapshots sale-time `unitCost` on every
+new consumption movement instead of writing `null`. The amount is expressed in
+the movement's entered unit, including conversion from the ingredient base unit.
+Reports flag legacy consumption rows with a null cost as degraded. This does not
+round the snapshot, so D11/D19 remains a separate precision concern.
 
-**What a fix looks like:** store the unit cost **on the consumption movement** at
-the moment of sale, and compute historical COGS from that instead of from the
-ingredient's current average. The ledger already has a `unitCost` field, and
-consumption currently writes `null` into it — as SOURCE did.
+**Why this remains open:** the domain's reporting snapshot and aggregators still
+accept `menuHpp`, while an inventory movement carries only the order
+`referenceId`—not an order-item or menu attribution. The exact Dashboard capability
+graph also contains no catalog/HPP dependency. P3 S11 therefore neither reopened
+the closed P1 domain nor invented a hidden dependency. It passes no current HPP,
+preserves the domain's missing-cost signal, and does not silently restate history;
+but it cannot yet calculate historical item-level COGS from the new snapshots.
 
-**What it costs to leave:** historical financial figures are not stable. For a
-single warung this may be perfectly tolerable; it is the owner's call, not mine.
-
-**Action for slice 11:** flag it rather than quietly reproducing it. Distinct from
-D11 — that one is precision, this one is time.
+**Decision needed later:** when the domain/data attribution model is reopened,
+link consumption rows to order items or menu quantities and teach the domain
+reporting owner to aggregate their stored costs. Until then the capture side is
+ready, legacy rows degrade explicitly, and the historical COGS reader remains
+incomplete.
 
 ---
 

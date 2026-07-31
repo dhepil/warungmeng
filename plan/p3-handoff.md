@@ -33,8 +33,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 7 | orders — order-read, order-submission | done — 53a9ee1, b19cdcc, 5b06da9, 764d885 |
 | 8 | orders — order-cancellation + `cancelOrderAtomically` | done — b4c5b0c, 6455f64 |
 | 9 | pos — session, cart | done — 93ec301, 0f4ef83 |
-| 10 | pos — checkout + `submitPosCheckoutAtomically` | next |
-| 11 | dashboard — overview, reports | |
+| 10 | pos — checkout + `submitPosCheckoutAtomically` | done — ffc2132, 68e1606, 1af89fd |
+| 11 | dashboard — overview, reports | done — 8a576d9, 97234d9 |
 | 12 | settings — theme-preference, business-hours | |
 | 13 | `adminEngineGraph.test.ts` — phase gate | |
 
@@ -656,6 +656,51 @@ known Rolldown binding clash; the Linux package command correctly failed with
 tree remained clean. Future sessions should install the binding matching the OS that
 actually runs Node, while still restoring `package-lock.json` first and never
 deleting lockfile or `node_modules`.
+
+## Decisions locked during S11 (dashboard)
+
+- **The area has exactly two children and four unique capability dependencies.**
+  `admin.dashboard.overview` requires `admin.orders.read`,
+  `admin.inventory.materials-read`, and `admin.finance.ledger-read`.
+  `admin.dashboard.reports` requires `admin.orders.read`,
+  `admin.inventory.stock-movements`, and `admin.finance.ledger-read`. The parent
+  remains identity-only and imports no child.
+- **D15 is resolved.** Dashboard resolves the published Inventory capabilities;
+  it does not import `InventoryStorePort`, declare a structural
+  `Pick<InventoryRepository>`, or call an unfiltered repository directly.
+  Overview asks materials-read for active materials, preserving the archived-row
+  boundary at its owner.
+- **Partial failure is data; total failure is failure.** Orders, Inventory, and
+  Finance load concurrently. A surviving source remains usable and carries both
+  its own degraded state and upstream issues. If none of the three sources is
+  usable, the operation fails rather than manufacturing an authoritative empty
+  dashboard.
+- **The domain reporting module owns every aggregation.** Both children construct
+  its snapshot and call its dashboard, trend, breakdown, peak, menu, category,
+  low-stock, and inventory-usage selectors. They do not copy the formulas. All
+  reporting-period decisions use the Jakarta calendar.
+- **Inventory edge cases remain visible.** Overview excludes archived materials
+  and projects a missing balance as zero before the domain low-stock selector.
+  Reports reconstruct current balances by summing the full outlet movement ledger
+  instead of reaching around `admin.inventory.stock-movements` for a second store
+  read.
+- **D20 is narrowed, not closed.** S11 deliberately touched
+  `children/stock-consumption`: every new consumption movement now snapshots the
+  sale-time unit cost in the movement's entered unit, including base-unit
+  conversion, rather than writing SOURCE's `null`. Legacy null-cost consumption
+  rows in a report period produce an explicit degraded issue. This is data capture,
+  not the complete historical COGS reader: the closed domain reporting API still
+  consumes `menuHpp`, and movement rows identify the order but not the order item
+  or menu. LOGIC gives Dashboard no catalog/HPP capability, so S11 supplies no
+  hidden current-HPP dependency and preserves the domain's missing-cost signal.
+  Historical item-level COGS remains a later domain/attribution decision. D11/D19
+  rounding and precision were not altered.
+- **The witnesses were proved non-vacuous.** Mutating overview's all-source guard,
+  the consumption cost snapshot, reports' all-source guard, and reports' movement
+  balance reconstruction each failed exactly one focused test. A temporary real-
+  disk discovery test saw both children; renaming reports to an allowed `*.test.ts`
+  name kept structure green but made discovery lose it, and restoration made the
+  witness green again. The throwaway test was deleted. Full check: 471 tests.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 
