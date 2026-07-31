@@ -374,7 +374,7 @@ since it needs a `plan.json` slot for the new child.
 
 ---
 
-## D18 — An unpaid order that consumed stock never gets it back · `open`
+## D18 — An unpaid order that consumed stock never gets it back · `resolved`
 
 **Found:** P3 S5, from the scout's read of SOURCE's cancellation command.
 **Belongs to the order-cancellation slice, not to inventory.**
@@ -397,6 +397,17 @@ idempotent and reports a replay, so calling it more eagerly is safe.
 
 **Action for slice 8:** decide the trigger deliberately and record it. Do not
 inherit the refund gate by accident.
+
+**RESOLVED in P3 S8 by owner decision (2026-07-31): return stock whenever it was
+actually deducted, never gated on payment.** The reversal is now attempted on every
+cancellation and `stock-reversal` — the only owner that authoritatively knows whether
+this order consumed anything — is the sole judge; the refund projection still runs
+and reports but decides nothing. Calling it unconditionally required classifying the
+sibling's endings (never-consumed and already-reversed are benign, everything else
+rolls back), because `stock-reversal` reports "never consumed" as a failure, which is
+right for its own caller but an ordinary ending here. Both directions mutation-tested.
+This entry is kept rather than deleted because the register was still showing it
+`open` two slices later; the status line is the thing sessions read.
 
 ---
 
