@@ -96,11 +96,9 @@ function financeStoreOver(options: {
       if (options.fail) throw new Error("manual ledger unavailable");
       return options.rows ?? [];
     },
-    getManualTransactionById: unsupported,
     createManualTransaction: unsupported,
     updateManualTransaction: unsupported,
     voidManualTransaction: unsupported,
-    newId: () => "finance-test",
   };
 }
 

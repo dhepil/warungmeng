@@ -69,6 +69,9 @@ export const CUSTOM_CATEGORY_LABEL_MAX_LENGTH = 80;
  */
 export const CUSTOM_CATEGORY_PREFIX = "custom:";
 
+/** SOURCE's temporary form value meaning "use the separately entered label". */
+export const CUSTOM_CATEGORY_SELECTION = "custom";
+
 /**
  * How many recent transactions the overview keeps. SOURCE: `.slice(0, 5)` inside
  * its overview view-model — a product decision expressed as a magic number.
@@ -105,9 +108,10 @@ export { DEFAULT_REPORTING_TIME_ZONE as FINANCE_TIME_ZONE } from "@warungmeng/do
 /**
  * The Finance area's window onto storage — MANUAL transactions only.
  *
- * Ported from SOURCE `packages/data/src/repositories/FinanceRepository.ts` with
- * its result conventions kept, because callers depend on them: `null` from a get,
- * an update, or a void means not-found.
+ * Ported from SOURCE `packages/data/src/repositories/FinanceRepository.ts`, but
+ * with its ambiguous write results made explicit below. SOURCE also exposed
+ * `getManualTransactionById`; no production caller used it — only repository tests
+ * did — so it is deliberately absent rather than carried as dead surface.
  *
  * Note what is absent. There is no method to write a sale or a refund, because
  * neither is ever stored — both are projected from orders. Adding one would create
@@ -116,15 +120,18 @@ export { DEFAULT_REPORTING_TIME_ZONE as FINANCE_TIME_ZONE } from "@warungmeng/do
  *
  * Two departures from SOURCE:
  *
- *   - `createManualTransaction` and `updateManualTransaction` take an input the
- *     child has ALREADY validated, and the store does not re-judge it. SOURCE's
- *     in-memory implementation called the domain validator itself and THREW a
- *     `RangeError` — validation living in the adapter, after the caller had already
- *     committed to writing. Same inversion S4 fixed for inventory: decide, then
- *     write. A caller that skips the child's validation gets whatever the adapter
- *     does; the engine's job is to not be that caller.
- *   - `newId` is on the port, as in the Menu and Inventory areas, so ids have one
- *     injection point and a test can make them deterministic.
+ * `createManualTransaction` and `updateManualTransaction` take an input the child
+ * has ALREADY validated, and the store does not re-judge it. SOURCE's in-memory
+ * implementation called the domain validator itself and THREW a `RangeError` —
+ * validation living in the adapter, after the caller had already committed to
+ * writing. Same inversion S4 fixed for inventory: decide, then write. A caller
+ * that skips the child's validation gets whatever the adapter does; the engine's
+ * job is to not be that caller.
+ *
+ * There is deliberately no `newId`. Unlike Menu's nested options or Inventory's
+ * movement plan, no finance caller needs the id before the row is written; SOURCE's
+ * repository minted it inside `createManualTransaction`. Adding an exposed
+ * generator here would be dead surface.
  *
  * No ordering is promised. SOURCE's implementation sorted inside `listManualTransactions`
  * by delegating to the domain's filter; the read child sorts its own results now, so
@@ -134,15 +141,41 @@ export interface FinanceStorePort {
   listManualTransactions(
     query?: FinanceTransactionQuery,
   ): Promise<readonly FinanceTransaction[]>;
-  getManualTransactionById(id: string): Promise<FinanceTransaction | null>;
   createManualTransaction(input: ManualTransactionRecord): Promise<FinanceTransaction>;
-  updateManualTransaction(
-    id: string,
-    input: ManualTransactionRecord,
-  ): Promise<FinanceTransaction | null>;
-  voidManualTransaction(id: string, occurredAt: string): Promise<FinanceTransaction | null>;
-  newId(): string;
+  updateManualTransaction(id: string, input: ManualTransactionRecord): Promise<FinanceUpdateCommit>;
+  voidManualTransaction(id: string): Promise<FinanceVoidCommit>;
 }
+
+/**
+ * The store's authoritative answer to an edit.
+ *
+ * SOURCE returned `null` for three different facts: missing id, automatic row,
+ * or already-voided row. A child cannot turn that into an honest result, and a
+ * pre-read would introduce a second, weaker judge plus a race. The write therefore
+ * says which decision it made.
+ */
+export type FinanceUpdateCommit =
+  | { readonly status: "updated"; readonly transaction: FinanceTransaction }
+  | { readonly status: "not-found" }
+  | {
+      readonly status: "not-editable";
+      readonly reason: "automatic" | "voided";
+      readonly transaction: FinanceTransaction;
+    };
+
+/**
+ * The store's authoritative answer to an idempotent void.
+ *
+ * SOURCE returned the row alone, so a fresh void and a replay were
+ * indistinguishable. A pre-read in the child would introduce the same race as an
+ * edit. The write itself reports whether it changed the row — the same judge
+ * decides and writes, per the S5 rule.
+ */
+export type FinanceVoidCommit =
+  | { readonly status: "voided"; readonly transaction: FinanceTransaction }
+  | { readonly status: "already-voided"; readonly transaction: FinanceTransaction }
+  | { readonly status: "not-found" }
+  | { readonly status: "not-voidable"; readonly transaction: FinanceTransaction };
 
 export const FINANCE_STORE_PORT = createOutboundPortToken<FinanceStorePort>(
   "admin.finance.store",
@@ -262,9 +295,9 @@ export interface RecordTransactionInput {
   readonly occurredAt: string;
   readonly direction: FinanceDirection;
   readonly status: ManualFinanceStatus;
-  /** A `FINANCE_CATEGORIES` id, or a custom label to be named. */
+  /** A `FINANCE_CATEGORIES` id or `CUSTOM_CATEGORY_SELECTION`. */
   readonly categoryId: string;
-  /** Required when `categoryId` is `CUSTOM_CATEGORY_PREFIX`-shaped or blank. */
+  /** Required when `categoryId` is `CUSTOM_CATEGORY_SELECTION`. */
   readonly customCategoryLabel?: string;
   readonly amount: Money;
   readonly paymentMethod: FinancePaymentMethod;
