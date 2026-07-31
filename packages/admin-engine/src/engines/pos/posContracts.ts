@@ -58,6 +58,11 @@ export interface PosCartItem {
   readonly note: string;
 }
 
+/** Exact cart aggregate identity shared by cart CAS and checkout finalization. */
+export function posCartFingerprint(items: readonly PosCartItem[]): string {
+  return JSON.stringify(items);
+}
+
 /**
  * State needed by S9 plus identity/cash fields S10 must update transactionally.
  * Receipt and pending-sync state stay out: S10's target is atomic, unlike SOURCE's
@@ -108,6 +113,10 @@ export interface PosSessionSnapshot {
   readonly session: PosSessionState;
   readonly cashSales: Money;
   readonly expectedCash: Money;
+  /** Durable per-till counter used by S10's idempotency key and receipt number. */
+  readonly checkoutSequence: number;
+  /** Reserved checkout identity reused until an attempt reaches a terminal result. */
+  readonly checkoutKey: string | null;
   readonly lastCloseRecord: PosSessionCloseRecord | null;
 }
 
@@ -119,8 +128,16 @@ export interface PosSessionClosingOutcome {
   readonly cartItemCount: number;
 }
 
+export interface PosCheckoutIdentity {
+  readonly key: string;
+  readonly sequence: number;
+  readonly stateRevision: number;
+}
+
 export interface PosSession {
   getSession(): Promise<OperationResult<PosSessionSnapshot>>;
+  /** Reserves or reuses a durable retry key before any order/inventory write. */
+  beginCheckout(): Promise<OperationResult<PosCheckoutIdentity>>;
   openSession(input: OpenPosSessionInput): Promise<OperationResult<PosSessionSnapshot>>;
   closeSession(input: ClosePosSessionInput): Promise<OperationResult<PosSessionClosingOutcome>>;
 }
@@ -150,6 +167,13 @@ export interface UpdatePosCartItemInput {
 export interface ClearPosCartInput {
   /** S10 clears only the snapshot it committed; newer items must survive. */
   readonly expectedRevision: number;
+  /** Checkout finalization increments till state in the same guarded write. */
+  readonly checkout?: {
+    readonly expectedKey: string;
+    readonly cashSaleAmount: number;
+    /** Stable identity guard: only clear when this aggregate is the committed one. */
+    readonly orderFingerprint: string;
+  };
 }
 
 export interface PosCart {
@@ -193,8 +217,6 @@ export interface SubmitPosCheckoutInput {
   readonly pricing: PosPricingOptions;
   /** One instant owns order number, aggregate timestamps, event, and receipt. */
   readonly occurredAt: string;
-  /** Stable ids supplied by composition; retries reuse them with the checkout key. */
-  readonly eventId: string;
 }
 
 export interface PosReceipt {
@@ -247,6 +269,9 @@ export const POS_ISSUE = {
   orderFailed: "pos-order-submission-failed",
   inventoryFailed: "pos-inventory-consumption-failed",
   financeFailed: "pos-finance-projection-failed",
+  orderReplay: "pos-order-replayed",
+  inventoryReplay: "pos-inventory-replayed",
+  inventorySkipped: "pos-inventory-item-skipped",
   finalizationFailed: "pos-checkout-finalization-failed",
   atomicFailed: "pos-atomic-operation-failed",
 } as const;

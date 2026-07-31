@@ -58,6 +58,8 @@ export function projectPosSession(state: PosOperationalState): PosSessionSnapsho
     session: state.session,
     cashSales: IDR(state.cashSales),
     expectedCash: IDR(expected),
+    checkoutSequence: state.checkoutSequence,
+    checkoutKey: state.checkoutKey,
     lastCloseRecord: state.lastCloseRecord,
   };
 }
@@ -147,6 +149,12 @@ function staleState<TValue>(operation: string): OperationResult<TValue> {
   ]);
 }
 
+function checkoutKeyFor(state: PosOperationalState): string | null {
+  return state.session.status === "open"
+    ? `pos:${state.session.outlet.id}:${state.session.openedAt}:${state.checkoutSequence}`
+    : null;
+}
+
 function sessionOverState(port: PosOperationalStatePort): PosSession {
   return {
     async getSession() {
@@ -154,6 +162,40 @@ function sessionOverState(port: PosOperationalStatePort): PosSession {
         return operationSuccess(projectPosSession(await port.load()));
       } catch (error) {
         return stateFailed("getSession", error);
+      }
+    },
+
+    async beginCheckout() {
+      let current: PosOperationalState;
+      try {
+        current = await port.load();
+      } catch (error) {
+        return stateFailed("beginCheckout", error);
+      }
+      const key = current.checkoutKey ?? checkoutKeyFor(current);
+      if (key === null) {
+        return operationFailure("conflict", [
+          operationIssue(POS_ISSUE.sessionAlreadyClosed, "Open a POS session before checkout."),
+        ]);
+      }
+      if (current.checkoutKey === key) {
+        return operationSuccess({
+          key,
+          sequence: current.checkoutSequence,
+          stateRevision: current.revision,
+        });
+      }
+      const next = { ...current, revision: current.revision + 1, checkoutKey: key };
+      try {
+        return (await port.commit(current.revision, next))
+          ? operationSuccess({
+              key,
+              sequence: current.checkoutSequence,
+              stateRevision: next.revision,
+            })
+          : staleState("beginCheckout");
+      } catch (error) {
+        return stateFailed("beginCheckout", error);
       }
     },
 
@@ -271,6 +313,7 @@ function sessionOverState(port: PosOperationalStatePort): PosSession {
 function sessionWithoutState(): PosSession {
   return {
     getSession: async () => noState(),
+    beginCheckout: async () => noState(),
     openSession: async () => noState(),
     closeSession: async () => noState(),
   };

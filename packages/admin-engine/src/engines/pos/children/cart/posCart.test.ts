@@ -16,6 +16,7 @@ import {
   POS_CART_ID,
   POS_ISSUE,
   POS_OPERATIONAL_STATE_PORT,
+  posCartFingerprint,
 } from "../../posContracts";
 import posEngine from "../../posEngine";
 import posCartChild, {
@@ -242,6 +243,65 @@ describe("POS cart", () => {
     expect(await cart!.clear({ expectedRevision: 5 })).toMatchObject({
       status: "success",
       value: { revision: 6, items: [] },
+    });
+    dispose();
+  });
+
+  it("finalizes checkout counters only for the reserved key and exact committed cart", async () => {
+    const committed = item();
+    const port = statePort(
+      initial({
+        revision: 5,
+        cartItems: [committed],
+        cashSales: 20_000,
+        checkoutSequence: 7,
+        checkoutKey: "stable-key",
+      }),
+    );
+    const { cart, dispose } = runtimeWith(port);
+
+    expect(
+      await cart!.clear({
+        expectedRevision: 5,
+        checkout: {
+          expectedKey: "wrong-key",
+          cashSaleAmount: 10_000,
+          orderFingerprint: posCartFingerprint([committed]),
+        },
+      }),
+    ).toMatchObject({ status: "failure", issues: [{ code: POS_ISSUE.staleState }] });
+    expect(port.read()).toMatchObject({ cashSales: 20_000, checkoutSequence: 7 });
+
+    expect(
+      await cart!.clear({
+        expectedRevision: 5,
+        checkout: {
+          expectedKey: "stable-key",
+          cashSaleAmount: 10_000,
+          orderFingerprint: posCartFingerprint([
+            committed,
+            item({ id: "new-line", menuItemId: "menu-2" }),
+          ]),
+        },
+      }),
+    ).toMatchObject({ status: "failure", issues: [{ code: POS_ISSUE.staleState }] });
+    expect(port.read().cartItems).toHaveLength(1);
+
+    expect(
+      await cart!.clear({
+        expectedRevision: 5,
+        checkout: {
+          expectedKey: "stable-key",
+          cashSaleAmount: 10_000,
+          orderFingerprint: posCartFingerprint([committed]),
+        },
+      }),
+    ).toMatchObject({ status: "success", value: { items: [] } });
+    expect(port.read()).toMatchObject({
+      cashSales: 30_000,
+      checkoutSequence: 8,
+      checkoutKey: null,
+      cartItems: [],
     });
     dispose();
   });

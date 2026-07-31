@@ -116,6 +116,37 @@ describe("POS session", () => {
     dispose();
   });
 
+  it("reserves one durable checkout key and reuses it until finalization", async () => {
+    const port = statePort(
+      initial({
+        revision: 4,
+        session: {
+          status: "open",
+          outlet,
+          openingBalance: IDR(0),
+          openedAt: "2026-08-01T02:00:00.000Z",
+        },
+        checkoutSequence: 7,
+      }),
+    );
+    const { session, dispose } = runtimeWith(port);
+
+    const first = await session!.beginCheckout();
+    const second = await session!.beginCheckout();
+
+    expect(first).toMatchObject({
+      status: "success",
+      value: {
+        key: "pos:wm-1:2026-08-01T02:00:00.000Z:7",
+        sequence: 7,
+        stateRevision: 5,
+      },
+    });
+    expect(second).toEqual(first);
+    expect(port.read()).toMatchObject({ revision: 5, checkoutSequence: 7 });
+    dispose();
+  });
+
   it("rejects double-open instead of resetting an active till", async () => {
     const port = statePort(
       initial({

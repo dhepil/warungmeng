@@ -25,6 +25,7 @@ import {
   POS_CART_ID,
   POS_ISSUE,
   POS_OPERATIONAL_STATE_PORT,
+  posCartFingerprint,
 } from "../../posContracts";
 import { POS_ENGINE_ID } from "../../posEngine";
 
@@ -185,11 +186,23 @@ async function commitCart(
   current: PosOperationalState,
   items: readonly PosCartItem[],
   operation: string,
+  checkout?: {
+    readonly expectedKey: string;
+    readonly cashSaleAmount: number;
+    readonly orderFingerprint: string;
+  },
 ): Promise<OperationResult<PosCartSnapshot>> {
   const next: PosOperationalState = {
     ...current,
     revision: current.revision + 1,
     cartItems: items.map(cloneItem),
+    ...(checkout === undefined
+      ? {}
+      : {
+          cashSales: current.cashSales + checkout.cashSaleAmount,
+          checkoutSequence: current.checkoutSequence + 1,
+          checkoutKey: null,
+        }),
   };
 
   try {
@@ -306,8 +319,17 @@ function cartOverState(port: PosOperationalStatePort): PosCart {
     async clear(input) {
       const loaded = await loadState(port, "clear");
       if (loaded.status === "failure") return loaded;
-      if (loaded.value.revision !== input.expectedRevision) return staleState("clear");
-      return commitCart(port, loaded.value, [], "clear");
+      if (
+        loaded.value.revision !== input.expectedRevision ||
+        (input.checkout !== undefined &&
+          (input.checkout.cashSaleAmount < 0 ||
+            !Number.isInteger(input.checkout.cashSaleAmount) ||
+            loaded.value.checkoutKey !== input.checkout.expectedKey ||
+            posCartFingerprint(loaded.value.cartItems) !== input.checkout.orderFingerprint))
+      ) {
+        return staleState("clear");
+      }
+      return commitCart(port, loaded.value, [], "clear", input.checkout);
     },
   };
 }
