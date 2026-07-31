@@ -32,8 +32,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | done — 6d603b5, 40d2308, 9b91302, 0dc6370, 77ffed8, 9f67f13 |
 | 7 | orders — order-read, order-submission | done — 53a9ee1, b19cdcc, 5b06da9, 764d885 |
 | 8 | orders — order-cancellation + `cancelOrderAtomically` | done — b4c5b0c, 6455f64 |
-| 9 | pos — session, cart | next |
-| 10 | pos — checkout + `submitPosCheckoutAtomically` | |
+| 9 | pos — session, cart | done — 93ec301, 0f4ef83 |
+| 10 | pos — checkout + `submitPosCheckoutAtomically` | next |
 | 11 | dashboard — overview, reports | |
 | 12 | settings — theme-preference, business-hours | |
 | 13 | `adminEngineGraph.test.ts` — phase gate | |
@@ -484,6 +484,178 @@ as `roadmap.md` requires.
   not inert (it keeps cancellation out of an Orders area whose read capability never
   came up). A decorative call would have been worse — a read whose result is discarded
   is the exact shape of the SOURCE gate this slice removed.
+
+## S9 reconnaissance notes (POS session + cart) — IMPLEMENTATION IS DONE
+
+**Status correction, added when these notes were committed.** The heading below
+originally read "implementation NOT started", and the paragraph said no product file
+had been created. That was true when the research pass was written, and it is now
+false: S9 landed in two green commits — **93ec301** (posEngine, posContracts,
+session child + 271-line test) and **0f4ef83** (cart child + 277-line test) — at
+00:32, about half an hour BEFORE these notes were saved at 00:59. All six planned
+S9 files exist, 18 POS tests pass, and the suite is at 430 tests.
+
+The "Verification still required" section at the end is therefore also stale: the
+permanent tests it asks for already exist in both commits. What was NOT confirmed in
+writing is the mutation round and the throwaway discovery witness — see the note at
+the end of this section.
+
+Everything between here and that note is the SOURCE research, which was checked
+against the built code and holds up. It is kept because it is the reasoning behind
+the implementation, and because its S10 findings are load-bearing.
+
+### Exact S9 target surface
+
+Only these six planned product files belong to S9:
+
+- `engines/pos/posEngine.ts`
+- `engines/pos/posContracts.ts`
+- `engines/pos/children/session/posSessionChild.ts`
+- `engines/pos/children/session/posSession.test.ts`
+- `engines/pos/children/cart/posCartChild.ts`
+- `engines/pos/children/cart/posCart.test.ts`
+
+Checkout and `submitPosCheckoutAtomically.ts` remain entirely S10. LOGIC §8 names
+`admin.pos.session` and `admin.pos.cart` verbatim; use those ids for both child and
+capability. Neither S9 child declares a required capability. S10 alone requires both
+plus catalog, stock consumption, order submission, finance recording, and atomic
+operation. Therefore **cart must not require `admin.menu.catalog-read`** and neither
+child may import its sibling. Each resolves its own injected port and tests reach its
+capability through a probe child, as in every earlier area.
+
+### SOURCE behavior already mapped
+
+Files read in depth: SOURCE `packages/domain/src/pos/{types,session,cart,pricing,
+checkout}.ts` and tests; Admin POS `application/{posSessionStore,
+posSessionPersistence,posCashierModel,posCapabilities,usePosCashier,usePosCatalog}.ts`
+and tests; its three ports, composition wiring, catalog/cart/variant/session/close
+components, and cashier screen. Backend target §4/§5/§9 was also checked.
+
+**Session.** SOURCE has one closed/open cashier session for outlet `wm-1`, a whole
+non-negative IDR opening balance, `openedAt`, cash sales, sequence, and last close
+record. Expected cash is opening balance + cash sales. Closing requires an open
+session and whole non-negative actual cash/cash sales, then records opening, sales,
+expected, actual, and a **signed** variance. Closing again is a no-op. A second OPEN
+is not guarded in SOURCE logic — only the hidden button prevents it — and silently
+replaces `openedAt`, resets cash sales, and loses the prior session. Move that guard
+below UI: a second open must be a named conflict, not a reset.
+
+SOURCE close also empties cart and checkout state. That side effect cannot move into
+the session child: LOGIC gives session no cart requirement and cross-child imports
+are forbidden. Keep session authoritative over session/reconciliation only. Cart
+exposes clear; the caller that owns the close flow composes the two capabilities.
+Record this split in the tests and do not hide a cart mutation behind a shared
+mutable store updater.
+
+**Persistence.** SOURCE keeps the whole cashier object in one unrestricted
+`PosSessionStore.update(updater)` and mirrors it to a versioned `sessionStorage`
+blob. Its restore validator is shallow enough to accept malformed inner cart,
+money, timestamps, and session data. Do not copy either shape. Backend target says
+POS session is production operational state and browser storage is only a migration
+recovery cache. S9 therefore needs injected, transport-neutral persistence ports
+with narrow session/cart operations; a missing port follows the established rule:
+child stays active, publishes, reports one creation diagnostic, and every call
+returns a normalized dependency failure. Never import browser storage.
+
+**Cart.** A line snapshots id, menu id/name/base price, resolved domain
+`OrderVariantSelection[]`, positive whole quantity, and item note. Add starts at one
+and merges an equivalent line by menu id + sorted `(groupId, optionId)` pairs +
+`note.trim()`, preserving the older line id/snapshot and adding quantity. Variant
+input order is irrelevant; note outer whitespace is irrelevant for identity, while
+case/internal whitespace remains significant. Quantity <= 0 or non-integer removes
+the line in SOURCE; explicit remove also exists. Configuration update replaces
+variants/note but does NOT merge an edited line with an equivalent sibling. Preserve
+these observable rules unless a mutation exposes an invariant violation; do not
+silently adopt Storefront's different merge/cap policy.
+
+Variant resolution walks only `menu.variantGroupIds`, tolerates stale links by
+reporting `missing-group` (D1), de-duplicates selected option ids, checks the domain
+selection bounds against available options, rejects unknown or unavailable options,
+and snapshots names/prices. Extra selections for groups no longer attached to the
+menu are ignored. SOURCE considers options available when status is literally
+`available` and tracked quantity is >0; it does not inspect group visibility.
+
+SOURCE's POS sellability asks only: menu visible, literal availability status
+`available`, and tracked quantity >0. It ignores expired `unavailableUntil` and the
+entire `salesSchedule`. This is the already-recorded D6 family, but S9 is now the
+second strict-ordering reader and the handoff rule says two competing copies mean
+consolidate. Reuse domain `isMenuAvailable(menu, now)` for time/stock availability
+and combine it with visibility. Do **not invent schedule/time-zone behavior in S9**:
+SOURCE has no evaluator or test, LOGIC does not define one, and Settings business
+hours is not built until S12. Record schedule enforcement as debt for the point where
+S12 supplies the missing policy rather than guessing JavaScript-local or Jakarta
+semantics here.
+
+SOURCE validates only that tracked menu/option stock is above zero; it does not cap
+a requested cart quantity to available stock. Storefront has a different hard cap
+of 20 for untracked items. Preserve Admin's positive-whole rule in S9; catalog/price/
+stock revalidation immediately before commit belongs to S10, which resolves catalog
+and inventory. Do not invent Storefront policy in Admin.
+
+**Pricing boundary.** SOURCE stores fulfillment/payment/discount/service/tax/
+rounding beside cart, but target has a separate checkout child and S10 owns order
+construction. S9 cart owns line snapshots, quantity, variant configuration, clear,
+item count, unit/line totals, and subtotal only. Keep checkout defaults and pricing
+(`10%` tax, Rp100 rounding), cash sufficiency, receipt, cash-sales increment, order
+number, and order aggregate construction out of S9. Important S10 trap already
+found: nearest-step rounding can produce a negative rounding adjustment, while the
+current order-submission validator rejects every negative Money including rounding.
+Resolve that in S10 rather than distorting S9 subtotal behavior.
+
+### Minimum recommended S9 contract
+
+- Session port: load current session state; commit open; commit close. Store outcomes
+  must distinguish updated/replayed/conflict/not-found where the write is the
+  authority. Avoid a generic updater and avoid child-side read-then-write as the
+  final judge.
+- Session capability: read snapshot, open, close, calculate expected cash. Preserve
+  signed close variance. Leave checkout identity/cash-sales mutation hooks out until
+  S10 proves their exact need; then extend the same contracts file, which is already
+  S10's planned parent contract.
+- Cart port: load cart snapshot and commit a replacement against its current
+  revision. A revision is needed so S10 can clear the **committed** cart without
+  deleting items added after checkout began, as LOGIC §10 words it.
+- Cart capability: read snapshot, resolve variant choices, add, set quantity,
+  update configuration, remove, clear the expected revision, and pure unit/line/
+  subtotal projections. Commands return `OperationResult`; unknown line ids are
+  named not-found outcomes rather than silent successes.
+- Use existing domain `Money`, `MenuItem`, `MenuVariantGroup`,
+  `OrderVariantSelection`, `validateVariantSelectionRule`, and `isMenuAvailable`;
+  do not reopen P1 or redefine them.
+
+### Verification — what was actually confirmed, and by whom
+
+This section originally said "implementation has not begun" and listed the
+verification as outstanding. Superseded. The permanent tests exist in both commits
+(271 lines for session, 277 for cart; 18 POS tests, suite at 430).
+
+Confirmed in a later session, because the S9 commit messages recorded no evidence
+either way and an unverified claim is worth nothing:
+
+- **On-disk discovery, verified.** A throwaway test under `test/` found `admin.pos`
+  plus both children, and confirmed both publish the LOGIC §8 ids verbatim and
+  declare no `requires`. Then the witness was proven able to fail: renaming
+  `posCartChild.ts` to an allowed `*.test.ts` glob left **structure green** while
+  discovery lost the child. Restored byte-for-byte, throwaway deleted.
+- **The double-open guard is mutation-tested.** Disabling it turns
+  "rejects double-open instead of resetting an active till" red. The test is not
+  vacuous, which matters because this guard is the one place S9 deliberately departs
+  from SOURCE (where a second open silently reset the till and lost the prior
+  session).
+
+Still NOT independently confirmed, and worth a look if S10 touches them: the
+reconciliation variance sign, cart merge identity, variant validation, quantity
+removal, and revision-guarded clear. All have tests; none were mutation-checked by
+the verifying session. Treat them as "tested but unproven" rather than either
+trusted or suspect.
+
+Environment note: this session ran under native Windows. The first check hit the
+known Rolldown binding clash; the Linux package command correctly failed with
+`EBADPLATFORM`, so native Windows was repaired with
+`npm install --no-save @rolldown/binding-win32-x64-msvc`. The lockfile and working
+tree remained clean. Future sessions should install the binding matching the OS that
+actually runs Node, while still restoring `package-lock.json` first and never
+deleting lockfile or `node_modules`.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 
