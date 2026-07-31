@@ -245,6 +245,23 @@ describe("one failed source does not erase the other", () => {
     dispose();
   });
 
+  it("fails rather than fabricating an empty ledger when both configured sources fail", async () => {
+    const { ledger, dispose } = runtimeWith({
+      store: financeStoreOver({ fail: true }),
+      orders: orderReadOver({ fail: true }),
+    });
+
+    const result = await ledger!.listTransactions();
+    expect(result).toMatchObject({ status: "failure", reason: "failed" });
+    if (result.status === "failure") {
+      expect(result.issues.map((issue) => issue.code).sort()).toEqual([
+        "finance-order-read-failed",
+        "finance-store-failed",
+      ]);
+    }
+    dispose();
+  });
+
   it("publishes an honest failure when neither port exists", async () => {
     const { ledger, snapshot, dispose } = runtimeWith({});
 

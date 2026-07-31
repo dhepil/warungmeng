@@ -191,6 +191,7 @@ async function loadLedger(
   const issues: OperationIssue[] = [];
   let manualTransactions: readonly FinanceTransaction[] = [];
   let orderRecords: readonly Order[] = [];
+  let successfulSourceCount = 0;
 
   const [manualResult, orderResult] = await Promise.allSettled([
     store?.listManualTransactions() ?? Promise.resolve(undefined),
@@ -217,6 +218,7 @@ async function loadLedger(
     );
   } else {
     manualTransactions = manualResult.value ?? [];
+    successfulSourceCount += 1;
   }
 
   if (orders === undefined) {
@@ -237,6 +239,15 @@ async function loadLedger(
     );
   } else {
     orderRecords = orderResult.value ?? [];
+    successfulSourceCount += 1;
+  }
+
+  if (successfulSourceCount === 0) {
+    // An empty value is usable only when at least one source successfully said
+    // "there are no rows". When every configured source failed, [] is fabricated
+    // by the fallback assignments above and must not masquerade as a partial
+    // ledger. A degraded result without any trustworthy value is just a failure.
+    return operationFailure("failed", issues);
   }
 
   const transactions = sortFinanceTransactionsNewestFirst(

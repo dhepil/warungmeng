@@ -33,6 +33,7 @@ import type {
   FinanceTransaction,
   FinanceTransactionQuery,
   ManualFinanceStatus,
+  ManualFinanceTransactionInput,
   ManualFinanceTransactionType,
   Money,
   Order,
@@ -138,9 +139,7 @@ export { DEFAULT_REPORTING_TIME_ZONE as FINANCE_TIME_ZONE } from "@warungmeng/do
  * ledger order does not depend on which adapter is plugged in.
  */
 export interface FinanceStorePort {
-  listManualTransactions(
-    query?: FinanceTransactionQuery,
-  ): Promise<readonly FinanceTransaction[]>;
+  listManualTransactions(): Promise<readonly FinanceTransaction[]>;
   createManualTransaction(input: ManualTransactionRecord): Promise<FinanceTransaction>;
   updateManualTransaction(id: string, input: ManualTransactionRecord): Promise<FinanceUpdateCommit>;
   voidManualTransaction(id: string): Promise<FinanceVoidCommit>;
@@ -312,19 +311,7 @@ export interface RecordTransactionInput {
  * This is the domain's own input type; it is aliased rather than redefined so the
  * store port speaks the domain's vocabulary and the child owns the conversion.
  */
-export type ManualTransactionRecord = {
-  readonly occurredAt: string;
-  readonly direction: FinanceDirection;
-  readonly type: ManualFinanceTransactionType;
-  readonly status: ManualFinanceStatus;
-  readonly categoryId: string;
-  readonly categoryLabel: string;
-  readonly amount: Money;
-  readonly paymentMethod: FinancePaymentMethod;
-  readonly description: string;
-  readonly referenceNumber: string;
-  readonly attachment: FinanceAttachmentMetadata | null;
-};
+export type ManualTransactionRecord = ManualFinanceTransactionInput;
 
 /**
  * Which manual type a direction produces — SOURCE's rule, named.
