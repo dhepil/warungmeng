@@ -23,8 +23,10 @@ export type OrderSubmissionRecord = Omit<Order, "id">;
  * Reads are intentionally raw. SOURCE put filtering and newest-first ordering in
  * its in-memory repository, so changing adapter could silently change visible
  * behavior. `order-read` owns those promises and the port promises no order.
- * Exact-id lookup is also implemented over the raw collection, avoiding the dead
- * duplicate get-by-id surface S6 removed from Finance.
+ * Exact-id lookup remains a separate port operation because Admin detail and later
+ * cancellation both need one row; forcing either to scan a paged backend collection
+ * would make an adapter limitation part of the capability contract. This differs
+ * from Finance's removed get-by-id method, which had no production caller.
  *
  * Submission stays a persistence handoff: its caller has already planned prices,
  * totals, order number, channel defaults, timestamps, and the initial event. That
@@ -38,6 +40,7 @@ export type OrderSubmissionRecord = Omit<Order, "id">;
  */
 export interface OrdersStorePort {
   listOrders(): Promise<readonly Order[]>;
+  getOrderById(id: string): Promise<Order | null>;
   submitOrder(
     idempotencyKey: string,
     record: OrderSubmissionRecord,

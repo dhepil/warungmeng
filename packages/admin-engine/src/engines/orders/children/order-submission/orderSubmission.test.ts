@@ -206,7 +206,11 @@ describe("the child in a real runtime", () => {
         return { status: "created", order };
       },
     );
-    const store: OrdersStorePort = { listOrders: async () => rows, submitOrder };
+    const store: OrdersStorePort = {
+      listOrders: async () => rows,
+      getOrderById: async (id) => rows.find((entry) => entry.id === id) ?? null,
+      submitOrder,
+    };
     const { submission, dispose } = runtimeWith(store);
 
     const result = await submission?.submitOrder(input());
@@ -228,7 +232,11 @@ describe("the child in a real runtime", () => {
         order: storedOrder(),
       }),
     );
-    const { submission, dispose } = runtimeWith({ listOrders: async () => [], submitOrder });
+    const { submission, dispose } = runtimeWith({
+      listOrders: async () => [],
+      getOrderById: async () => null,
+      submitOrder,
+    });
 
     const result = await submission?.submitOrder(input({ order: record({ items: [] }) }));
 
@@ -242,7 +250,11 @@ describe("the child in a real runtime", () => {
     const submitOrder = vi.fn(
       async (): Promise<OrderSubmissionCommit> => ({ status: "replayed", order: existing }),
     );
-    const { submission, dispose } = runtimeWith({ listOrders: async () => [existing], submitOrder });
+    const { submission, dispose } = runtimeWith({
+      listOrders: async () => [existing],
+      getOrderById: async (id) => (id === existing.id ? existing : null),
+      submitOrder,
+    });
 
     const result = await submission?.submitOrder(input());
 
@@ -259,6 +271,7 @@ describe("the child in a real runtime", () => {
     const existing = storedOrder();
     const conflictStore: OrdersStorePort = {
       listOrders: async () => [existing],
+      getOrderById: async (id) => (id === existing.id ? existing : null),
       submitOrder: async () => ({
         status: "conflict",
         order: existing,
@@ -278,6 +291,7 @@ describe("the child in a real runtime", () => {
 
     const failingStore: OrdersStorePort = {
       listOrders: async () => [],
+      getOrderById: async () => null,
       submitOrder: async () => {
         throw new Error("create order timed out");
       },

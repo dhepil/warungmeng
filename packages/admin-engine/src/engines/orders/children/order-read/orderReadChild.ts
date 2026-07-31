@@ -164,8 +164,8 @@ function orderReadOverStore(store: OrdersStorePort): OrderRead {
       }
 
       try {
-        const order = (await store.listOrders()).find((candidate) => candidate.id === orderId);
-        return order === undefined
+        const order = await store.getOrderById(orderId);
+        return order === null
           ? operationFailure("not-found", [
               operationIssue("order-not-found", `Order ${orderId} was not found.`, orderId),
             ])

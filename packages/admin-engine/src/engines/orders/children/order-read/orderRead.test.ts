@@ -62,6 +62,7 @@ function filters(overrides: Partial<OrderListFilters> = {}): OrderListFilters {
 function storeOver(rows: readonly Order[]): OrdersStorePort {
   return {
     listOrders: async () => rows,
+    getOrderById: async (id) => rows.find((entry) => entry.id === id) ?? null,
     submitOrder: async () => {
       throw new Error("write path not used by order-read");
     },
