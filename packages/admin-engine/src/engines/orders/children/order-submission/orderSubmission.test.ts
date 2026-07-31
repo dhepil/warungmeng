@@ -134,6 +134,19 @@ describe("submission validation", () => {
     );
   });
 
+  it("accepts a signed rounding adjustment while other money remains non-negative", () => {
+    const base = record();
+    const issues = validateOrderSubmission(
+      input({
+        order: record({
+          totals: { ...base.totals, rounding: IDR(-50), total: IDR(9_950) },
+        }),
+      }),
+    );
+
+    expect(issues).toEqual([]);
+  });
+
   it("enforces whole non-negative IDR amounts and positive whole quantities", () => {
     const base = record();
     const first = base.items[0];

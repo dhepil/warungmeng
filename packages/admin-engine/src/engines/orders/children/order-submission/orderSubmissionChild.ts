@@ -60,12 +60,19 @@ function validateMoney(
   value: Money,
   path: string,
   issues: OperationIssue[],
+  allowNegative = false,
 ): void {
-  if (value.currency !== "IDR" || !Number.isInteger(value.amount) || value.amount < 0) {
+  if (
+    value.currency !== "IDR" ||
+    !Number.isInteger(value.amount) ||
+    (!allowNegative && value.amount < 0)
+  ) {
     issues.push(
       issue(
         "invalid-order-money",
-        `${path} must be a non-negative whole IDR amount.`,
+        allowNegative
+          ? `${path} must be a whole IDR amount.`
+          : `${path} must be a non-negative whole IDR amount.`,
         path,
       ),
     );
@@ -129,7 +136,10 @@ export function validateOrderSubmission(
   validateMoney(order.totals.discount, "order.totals.discount", issues);
   validateMoney(order.totals.tax, "order.totals.tax", issues);
   validateMoney(order.totals.serviceCharge, "order.totals.serviceCharge", issues);
-  validateMoney(order.totals.rounding, "order.totals.rounding", issues);
+  // Nearest-step POS rounding is an adjustment, so it may be negative (e.g.
+  // Rp10,051 rounds to Rp10,100; Rp10,149 does too). Every other Money remains
+  // non-negative. SOURCE displayed this signed adjustment in checkout.
+  validateMoney(order.totals.rounding, "order.totals.rounding", issues, true);
   validateMoney(order.totals.total, "order.totals.total", issues);
 
   if (order.events.length === 0) {

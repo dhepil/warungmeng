@@ -4,7 +4,14 @@
 // narrow compare-and-set port: both children may change their own fields, while a
 // stale writer cannot overwrite a sibling's newer change. Checkout arrives in S10.
 
-import type { Money, OrderVariantSelection } from "@warungmeng/domain";
+import type {
+  Money,
+  Order,
+  OrderFulfillment,
+  OrderPaymentMethod,
+  OrderTotals,
+  OrderVariantSelection,
+} from "@warungmeng/domain";
 import type { OperationResult } from "@warungmeng/module-system";
 import { createCapabilityToken, createOutboundPortToken } from "@warungmeng/module-system";
 
@@ -157,6 +164,66 @@ export interface PosCart {
 export const POS_CART_ID = "admin.pos.cart";
 export const POS_CART = createCapabilityToken<PosCart>(POS_CART_ID);
 
+// ─── Checkout contracts ───────────────────────────────────────────────────────
+
+/** SOURCE defaults shown to every cashier before checkout. */
+export const DEFAULT_POS_CHECKOUT = {
+  fulfillment: "dine-in",
+  paymentMethod: "cash",
+  cashReceived: 0,
+  pricing: {
+    discountAmount: 0,
+    serviceChargeAmount: 0,
+    taxRate: 0.1,
+    roundingStep: 100,
+  },
+} as const;
+
+export interface PosPricingOptions {
+  readonly discountAmount: number;
+  readonly serviceChargeAmount: number;
+  readonly taxRate: number;
+  readonly roundingStep: number;
+}
+
+export interface SubmitPosCheckoutInput {
+  readonly fulfillment: Extract<OrderFulfillment, "dine-in" | "takeaway">;
+  readonly paymentMethod: Exclude<OrderPaymentMethod, "unknown">;
+  readonly cashReceived: number;
+  readonly pricing: PosPricingOptions;
+  /** One instant owns order number, aggregate timestamps, event, and receipt. */
+  readonly occurredAt: string;
+  /** Stable ids supplied by composition; retries reuse them with the checkout key. */
+  readonly eventId: string;
+}
+
+export interface PosReceipt {
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly paymentMethod: Exclude<OrderPaymentMethod, "unknown">;
+  readonly totals: OrderTotals;
+  readonly cashReceived: Money;
+  readonly change: Money;
+  readonly issuedAt: string;
+}
+
+export interface PosCheckoutOutcome {
+  readonly order: Order;
+  readonly receipt: PosReceipt;
+  /** True when the order store replayed the stable checkout key. */
+  readonly orderReplayed: boolean;
+  /** True when inventory reported that this order was already consumed. */
+  readonly inventoryReplayed: boolean;
+}
+
+export interface PosCheckout {
+  submitCheckout(input: SubmitPosCheckoutInput): Promise<OperationResult<PosCheckoutOutcome>>;
+}
+
+/** LOGIC §8 names both the child and capability `admin.pos.checkout`. */
+export const POS_CHECKOUT_ID = "admin.pos.checkout";
+export const POS_CHECKOUT = createCapabilityToken<PosCheckout>(POS_CHECKOUT_ID);
+
 export const POS_ISSUE = {
   noState: "no-pos-operational-state",
   stateFailed: "pos-operational-state-failed",
@@ -169,4 +236,17 @@ export const POS_ISSUE = {
   invalidItem: "invalid-pos-cart-item",
   invalidQuantity: "invalid-pos-cart-quantity",
   itemNotFound: "pos-cart-item-not-found",
+  sessionClosed: "pos-checkout-session-closed",
+  emptyCart: "pos-checkout-cart-empty",
+  invalidCheckout: "invalid-pos-checkout",
+  catalogFailed: "pos-checkout-catalog-failed",
+  menuNotFound: "pos-checkout-menu-not-found",
+  menuUnavailable: "pos-checkout-menu-unavailable",
+  cartChanged: "pos-checkout-cart-changed",
+  paymentInsufficient: "pos-payment-insufficient",
+  orderFailed: "pos-order-submission-failed",
+  inventoryFailed: "pos-inventory-consumption-failed",
+  financeFailed: "pos-finance-projection-failed",
+  finalizationFailed: "pos-checkout-finalization-failed",
+  atomicFailed: "pos-atomic-operation-failed",
 } as const;
