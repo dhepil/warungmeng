@@ -35,7 +35,7 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 9 | pos — session, cart | done — 93ec301, 0f4ef83 |
 | 10 | pos — checkout + `submitPosCheckoutAtomically` | done — ffc2132, 68e1606, 1af89fd |
 | 11 | dashboard — overview, reports | done — 8a576d9, 97234d9 |
-| 12 | settings — theme-preference, business-hours | |
+| 12 | settings — theme-preference, business-hours | done — d2e5adf, de42ceb |
 | 13 | `adminEngineGraph.test.ts` — phase gate | |
 
 Menu is first because several areas require `admin.menu.catalog-read`. Dashboard
@@ -701,6 +701,65 @@ deleting lockfile or `node_modules`.
   disk discovery test saw both children; renaming reports to an allowed `*.test.ts`
   name kept structure green but made discovery lose it, and restoration made the
   witness green again. The throwaway test was deleted. Full check: 471 tests.
+
+## Decisions locked during S12 (settings)
+
+- **The Settings area has exactly two independent children.** The parent is
+  identity-only. `admin.settings.theme-preference` and
+  `admin.settings.business-hours` are the exact UI/LOGIC ids, both declare
+  `requires: []`, and neither child imports or depends on its sibling. Settings is
+  absent from the LOGIC §8 capability graph, so no existing child was changed to
+  require it.
+- **Theme preference is headless preference state, not presentation.** The child
+  preserves SOURCE's schema-v2 preference model and defaults, validates and
+  normalizes its stored values, and migrates schema v1 in memory while reporting
+  degradation. Empty persistence resolves to defaults; malformed persisted data
+  also returns usable defaults with an issue rather than leaking invalid state.
+  Saves validate before one persistence call. Draft/preview state, contrast
+  presentation, components, AntD tokens, CSS, and rendering remain P5 UI work.
+  Persistence is an injected transport-neutral port; this package imports no
+  `localStorage`, `window`, React, or AntD. A later client adapter may choose
+  browser persistence without changing the engine contract.
+- **Business hours is backend-owned operational state.** Its injected store port
+  lists and authoritatively saves outlet schedules. The child validates outlet
+  identity, one complete and unique set of weekdays, unique time-range ids,
+  `HH:MM` grammar (`24:00` only as an end), ordered/non-overlapping ranges, open
+  days with ranges, at most five named special schedules, real inclusive date
+  ranges, and overlap among enabled specials before one write. Open-day ranges are
+  sorted on save as SOURCE did. SOURCE's `09:00–17:00` fixture survives only as an
+  exported default model; adapter/backend data remains production truth.
+- **S12 supplies the schedule policy deferred from S9, but does not wire POS.**
+  `evaluateAvailability` combines the selected outlet's hours with an optional
+  Menu `SalesSchedule`: an enabled special-date schedule overrides the regular
+  weekday, start is inclusive, end is exclusive, and both constraints must allow
+  the instant. The menu schedule is input data, not a dependency, so Business
+  Hours still has no `requires`. Later POS/application composition should pass the
+  outlet id, checkout instant, and catalog menu's `salesSchedule` after catalog
+  revalidation and before checkout's first write; a closed result is a pre-write
+  refusal. That integration requires an explicit owner-approved capability-graph
+  edge from checkout to `admin.settings.business-hours` rather than a hidden
+  import. No D30 was opened because the missing policy now exists; only its future
+  integration decision remains. S12 made no POS change.
+- **Jakarta remains the sole calendar convention.** The child reuses the domain
+  `DEFAULT_REPORTING_TIME_ZONE` and reporting-period validation, and projects the
+  local weekday/date/minute with `Intl.DateTimeFormat` fixed to Asia/Jakarta. No
+  machine-local or UTC alternative was introduced.
+- **Settings does not solve outlet identity.** Business Hours keys persistence and
+  evaluation by explicit outlet id, but does not choose the active outlet and no
+  outlet-management child was invented. Finance's `wm-1` default is unchanged;
+  this is additional evidence for open D25, whose owner remains P6 composition.
+- **Missing adapters follow the established active-but-unusable rule.** Each child
+  stays active and publishes, emits exactly one diagnostic for its absent port,
+  and every capability call returns a normalized dependency failure. Store
+  exceptions and authoritative not-found outcomes are also normalized rather than
+  thrown.
+- **The tests were proved load-bearing.** Four deliberate mutations—legacy theme
+  schema recognition, theme save validation, adjacent business-hours ranges, and
+  exclusive closing time—each failed exactly one focused test and were restored
+  byte-for-byte. A temporary real-discovery witness saw the parent plus both exact
+  child ids with empty requirements; renaming the business-hours production file
+  to an allowed `*.test.ts` name kept structure green but made discovery lose it.
+  Restoration passed and the throwaway test was deleted. Full check: 495 tests.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 

@@ -559,6 +559,12 @@ behavior are single-outlet, so this does not block P3.
 **Revisit at:** P6 application composition, when outlet/session state has a real
 owner.
 
+**S12 evidence:** Business Hours now persists and evaluates schedules under an
+explicit outlet id, but Settings does not own active-outlet selection and no
+outlet-management child was added. This confirms rather than resolves D25: P6
+composition must decide whether the application selects one outlet or consolidates
+them. Finance's default remains unchanged.
+
 ---
 
 ## D26 — Custom finance category ids can collide · `accepted`
