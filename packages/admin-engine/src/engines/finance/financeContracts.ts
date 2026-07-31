@@ -417,10 +417,17 @@ export const TRANSACTION_RECORDING =
  * Honest note on scope. This child overlaps `ledger-read` more than any other pair
  * in the port, because SOURCE's expense screen was its transaction screen with
  * `direction: "outflow"` forced on the query and the income button removed. LOGIC
- * §6 names it as its own child, so it is one — but it delegates the ledger read
- * rather than re-deriving it, and owns only what is genuinely expense-specific:
- * forcing the direction so no caller can widen it by mistake, and offering the
- * outflow categories. `total` is carried because SOURCE's breakdown needed a
+ * §6 names it as its own child, so it is one — but LOGIC §8 gives it no sibling
+ * requirement, which means it may not resolve ledger-read or transaction-recording
+ * behind the graph's back. It therefore accepts ledger rows a caller already read
+ * and owns only what is genuinely expense-specific: forcing the outflow scope,
+ * producing the posted expense breakdown, and offering the outflow categories.
+ *
+ * It deliberately has no write method. An expense is one kind of manual transaction,
+ * and `transaction-recording` already owns the validation and write. Copying that
+ * here would create two judges; requiring that sibling would invent a graph edge
+ * the target did not name. A gate that offers the expense workflow composes the two
+ * capabilities explicitly. `total` is carried because SOURCE's breakdown needed a
  * denominator and computed percentages against it in the view.
  */
 export interface ExpenseView {
@@ -431,17 +438,15 @@ export interface ExpenseView {
 }
 
 export interface ExpenseManagement {
-  /** Always outflow-scoped; a `direction` in the query is overridden, not trusted. */
-  queryExpenses(
-    query?: FinanceTransactionQuery,
-    outletId?: string,
-  ): Promise<OperationResult<ExpenseView>>;
+  /**
+   * Pure over a ledger the caller already obtained. Always outflow-scoped; a
+   * `direction` in the query is overridden, not trusted.
+   */
+  projectExpenses(
+    transactions: readonly FinanceTransaction[],
+  ): OperationResult<ExpenseView>;
   /** The categories an expense may be filed under — outflow only. */
   listExpenseCategories(): readonly FinanceCategory[];
-  /** Records an expense. Direction is forced, so an inflow cannot arrive here. */
-  recordExpense(
-    input: Omit<RecordTransactionInput, "direction">,
-  ): Promise<OperationResult<FinanceTransaction>>;
 }
 
 export const EXPENSE_MANAGEMENT_ID = "admin.finance.expense-management";
