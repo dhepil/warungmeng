@@ -599,3 +599,54 @@ at least deterministic, and the visible label remains on every row.
 
 **Revisit at:** if P5 introduces a persistent custom-category manager. Then ids
 should be generated once and labels edited independently.
+
+---
+
+## D27 — POS and Storefront must supply stable order-create retry identity · `open`
+
+**Found:** P3 S7, while building `order-submission`. **Slice 10 / P4 checkout.**
+
+SOURCE has no create idempotency. Its in-memory repository assigns a new id and
+appends on every call. The POS `processing` flag and Storefront
+`submissionLockRef` suppress same-screen double clicks only; neither protects a
+successful backend write whose response is lost. Retrying that submission can
+create a duplicate order, and POS increments its order-number sequence only after
+the response returns.
+
+S7 closes the engine/storage seam: `SubmitOrderInput` requires an idempotency key,
+and the authoritative store write distinguishes `created`, `replayed`, and
+`conflict`. What S7 deliberately cannot choose is the application identity from
+which that key comes.
+
+**Action for slice 10:** derive a stable POS key before submission from durable
+session/checkout identity (not a freshly generated random value on each retry),
+and preserve it until the full atomic checkout outcome is known. Report replay to
+the cashier rather than pretending fresh work happened.
+
+**Action for P4 Storefront checkout:** apply the same rule to checkout submission;
+a React ref remains only a responsiveness guard, never the durability mechanism.
+
+---
+
+## D28 — Forward order status progression has no target logic child · `open`
+
+**Found:** P3 S7, while mapping SOURCE Order detail against the target Orders tree.
+
+SOURCE Admin advances orders through
+`new → accepted → preparing → ready → completed` via the repository's authoritative
+`updated | not-found | invalid-transition` write. Cancellation is a different path
+and correctly owns slice 8's atomic workflow. The target logic tree, however, names
+only `order-read`, `order-submission`, and `order-cancellation`; there is no planned
+file/capability for ordinary forward progression.
+
+S7 did not smuggle mutation into `order-read` and did not widen submission into a
+lifecycle manager. Doing either would make the capability name false and hide a
+real structural omission.
+
+**What it costs to leave:** a later Admin Orders gate can read and cancel an order
+but has no authorized headless capability for accept/prepare/ready/complete.
+
+**Revisit at:** P3 slice 13 phase gate, when the complete Admin capability graph can
+be judged. If the owner authorizes a new planned child/file, its store mutation must
+preserve the SOURCE authoritative outcome and reuse the domain transition machine;
+never add the file by bypassing `plan.json`.

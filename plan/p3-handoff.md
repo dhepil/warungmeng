@@ -30,8 +30,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 4 | inventory A — materials-read, stock-movements, stock-adjustment | done — 9b9fad9, 69628a7, 0af1ccf |
 | 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | done — 47ece49, 65a064f, ba49026, a19ba0a |
 | 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | done — 6d603b5, 40d2308, 9b91302, 0dc6370, 77ffed8, 9f67f13 |
-| 7 | orders — order-read, order-submission | next |
-| 8 | orders — order-cancellation + `cancelOrderAtomically` | |
+| 7 | orders — order-read, order-submission | done — 53a9ee1, b19cdcc, 5b06da9, 764d885 |
+| 8 | orders — order-cancellation + `cancelOrderAtomically` | next |
 | 9 | pos — session, cart | |
 | 10 | pos — checkout + `submitPosCheckoutAtomically` | |
 | 11 | dashboard — overview, reports | |
@@ -387,6 +387,42 @@ as `roadmap.md` requires.
   caught `ManualTransactionRecord` restating a domain type and replaced it with an
   alias. Extend this discipline to every later area: a repository method is not a
   port method merely because SOURCE had it.
+
+## Decisions locked during S7 (orders read + submission)
+
+- **Orders uses one store port, but reads remain application-owned.** The port exposes
+  raw unordered rows, exact-id lookup, and the authoritative submission write.
+  Search/filter/order never moved with the SOURCE repository: `order-read` owns all
+  six filters, re-applies them, sorts newest-first, and adds id as a total-order
+  tie-break. Exact-id stays on the port because detail and S8 cancellation need one
+  authoritative row; unlike Finance's removed get-by-id, it has production callers
+  and must not require scanning a future paged collection.
+- **One calendar-day rule: Jakarta, now shared by Finance, Orders, and reporting.**
+  SOURCE's order repository expanded date keys as UTC while its screens formatted in
+  machine local time. A near-midnight row could display on a day the filter excluded.
+  Orders reuses the domain reporting date-key projection, validates real calendar
+  dates and rejects reversed ranges before reading.
+- **Submission is a complete-order persistence handoff, not checkout.** SOURCE POS
+  and Storefront each planned channel/defaults/customer/prices/totals/number/clock/
+  initial event before calling the repository. S7 validates their shared aggregate
+  invariants and passes it to one write. It does not own cart, catalog revalidation,
+  POS session, inventory, Finance, receipt, or cancellation. S10 composes those
+  owners around this capability.
+- **Create idempotency is explicit even though SOURCE had none.** The backend target
+  requires every create command to carry an idempotency key. The key is required at
+  S7's boundary; the store authoritatively returns `created`, `replayed`, or
+  `conflict`. A replay is a degraded usable outcome saying nothing was written, and
+  reusing a key for another payload is a conflict. No child-side pre-read — the
+  same store decision judges and writes. S10 must derive a stable POS key from its
+  session/sequence workflow rather than generating a new key on every retry.
+- **Cancellation remains entirely S8.** S7 created no cancellation helper, required
+  no atomic/inventory/finance capability, and did not infer stock behavior from
+  payment. D18 is still the mandatory S8 decision.
+- **Normal forward status management is still unowned.** SOURCE can advance
+  new→accepted→preparing→ready→completed, but the target tree names only read,
+  submission, and cancellation. S7 did not disguise a write as `order-read` or
+  widen submission into lifecycle management; D28 records the explicit gap for the
+  phase gate/owner.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 
