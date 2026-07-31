@@ -628,3 +628,37 @@ but has no authorized headless capability for accept/prepare/ready/complete.
 be judged. If the owner authorizes a new planned child/file, its store mutation must
 preserve the SOURCE authoritative outcome and reuse the domain transition machine;
 never add the file by bypassing `plan.json`.
+
+---
+
+## D29 — Cancellation declares `admin.orders.read` but never calls it · `accepted`
+
+**Found:** P3 S8, writing the cancellation child against LOGIC §8.
+
+LOGIC §8 lists four requirements for `admin.orders.order-cancellation`:
+`admin.orders.read`, `admin.inventory.stock-reversal`,
+`admin.finance.refund-projection`, and `admin.atomic-operation`. Three are resolved
+and used. `admin.orders.read` is resolved and never called.
+
+**Why it was left this way:** the store's `cancelOrder` is the authoritative judge of
+whether the order exists and may be cancelled — it computes the transition and
+returns `cancelled | not-found | invalid-transition`. Reading first to pre-validate
+would be a second judge and a race, which is the rule S6 settled for Finance's
+writes and S7 restated for submission. So there is genuinely nothing for the read
+capability to do in this workflow.
+
+Dropping the declaration was the alternative and was rejected: `new-target/` is the
+structural authority (rule 1), and the declaration is not inert — it keeps
+cancellation out of a runtime whose Orders read capability never came up, which
+would be an Orders area too broken to cancel through. Satisfying it with a
+decorative call would be worse: a read whose result is discarded is exactly the
+shape of SOURCE's `refunded` gate, which computed a value to answer a question it
+had no business answering.
+
+**What it costs to leave:** a reader comparing the `requires` list against the code
+sees a dependency with no call site and has to reconstruct why. That is what this
+entry is for.
+
+**Revisit at:** P3 slice 13 phase gate, alongside D28 — if a forward-progression
+child is authorized, it will need the read capability for real, and the question of
+what `requires` means for a write-first child should be answered once for both.

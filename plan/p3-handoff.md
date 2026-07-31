@@ -31,8 +31,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | done — 47ece49, 65a064f, ba49026, a19ba0a |
 | 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | done — 6d603b5, 40d2308, 9b91302, 0dc6370, 77ffed8, 9f67f13 |
 | 7 | orders — order-read, order-submission | done — 53a9ee1, b19cdcc, 5b06da9, 764d885 |
-| 8 | orders — order-cancellation + `cancelOrderAtomically` | next |
-| 9 | pos — session, cart | |
+| 8 | orders — order-cancellation + `cancelOrderAtomically` | done — b4c5b0c, 6455f64 |
+| 9 | pos — session, cart | next |
 | 10 | pos — checkout + `submitPosCheckoutAtomically` | |
 | 11 | dashboard — overview, reports | |
 | 12 | settings — theme-preference, business-hours | |
@@ -423,6 +423,67 @@ as `roadmap.md` requires.
   submission, and cancellation. S7 did not disguise a write as `order-read` or
   widen submission into lifecycle management; D28 records the explicit gap for the
   phase gate/owner.
+
+## Decisions locked during S8 (order cancellation)
+
+- **D18 is resolved: stock decides stock, money never does.** The owner decided on
+  2026-07-31 to return ingredients whenever they were actually deducted. So the
+  reversal is attempted on EVERY cancellation and the reversal capability — the only
+  owner that authoritatively knows whether this order consumed anything — is the sole
+  judge. SOURCE gated it on `projectRefund(order).length > 0`, which reduces to "was
+  this paid" because the domain only settles `paid → refunded` on cancellation; an
+  unpaid order that had consumed stock was cancelled and never got it back, so
+  inventory drifted permanently low. The refund projection still runs, still reports,
+  and now decides nothing. **Do not reintroduce a money-shaped gate over a stock
+  action anywhere.**
+- **Inside an atomic boundary, a returned failure COMMITS.** This is the single most
+  important mechanical fact in the slice and it shapes the whole file. Rollback is
+  triggered by a throw, so the two kinds of ending had to be strictly separated: a
+  business refusal (not-found, not cancellable) wrote nothing and is RETURNED, while
+  any failure after the write THROWS `CancellationRollback`, which the child catches
+  and converts back to a normalized failure so the capability still returns rather
+  than throws (LOGIC §5). Get it backwards in either direction and you either report
+  a healthy runtime as having undone work it never did, or you commit a cancelled
+  order whose stock stayed deducted. Both directions are mutation-tested. **Slice 10
+  faces exactly this in POS checkout — copy the separation, not just the port.**
+- **A sibling's failure is not automatically your failure.** `stock-reversal` reports
+  `order-never-consumed` as a failure, which is correct for a caller asking "undo
+  this consumption" — nothing to undo IS a failure. For cancellation it is an
+  ordinary, expected ending that most unpaid or never-started orders will hit.
+  Calling the reversal unconditionally therefore required classifying its endings:
+  `never-consumed` and `already-reversed` are benign, everything else rolls back.
+  Treating them as fatal would have made most orders impossible to cancel — the
+  regression a single mutation caught. When you start calling a capability in a new
+  situation, re-read what its failures MEAN rather than assuming they are yours.
+- **Ordering is a real dependency here, not narrative.** The reversal stamps its rows
+  from `order.updatedAt`, so the order must already carry its cancellation timestamp
+  when the reversal runs. LOGIC §10's sequence (cancel → reverse) and the reversal
+  child's clock agree, and they have to. Do not "optimize" by reversing first.
+- **No general status-setter door.** SOURCE published `updateStatus(orderId, status)`
+  alongside `cancel`, accepting `"cancelled"` and wired straight to the repository —
+  so the entire multi-owner workflow could be bypassed by one call, flipping a paid
+  order to cancelled/refunded with no reversal and outside any transaction. Its own
+  comment claimed `cancel` was "the single active cancellation command" while the
+  sibling contradicted it, and the invariant survived only because ONE screen filtered
+  `"cancelled"` out of its button list. `OrdersStorePort.cancelOrder` cancels and can
+  do nothing else. A capability must not depend on a screen for its correctness.
+  Forward progression stays D28.
+- **The capability id is `admin.orders.cancel`, not the child id.** The one place in
+  the area where they differ, exactly as S3 predicted when it set the default. LOGIC
+  §8 states it, so it is used verbatim. The probe-child test pattern is what makes
+  this safe: publishing under the wrong id failed 16 of 20 tests.
+- **Four endings are reported separately because an operator acts on them.**
+  `stockReturned`, `stockAlreadyReturned`, `refundOwed`, and a distinct
+  already-cancelled vs cannot-be-cancelled refusal. SOURCE had one boolean that meant
+  "was paid" and displayed it as though it meant "stock came back", plus one generic
+  warning covering both refusals — and a success toast that told an operator who had
+  just cancelled an order merely that its "status was updated".
+- **`admin.orders.read` is declared and never called — tech-debt D29, accepted.** The
+  store is the authoritative judge, so a pre-read would be a second judge and a race.
+  The declaration is kept because LOGIC is the structural authority and because it is
+  not inert (it keeps cancellation out of an Orders area whose read capability never
+  came up). A decorative call would have been worse — a read whose result is discarded
+  is the exact shape of the SOURCE gate this slice removed.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 
