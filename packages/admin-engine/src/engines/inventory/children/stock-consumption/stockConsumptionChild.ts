@@ -18,8 +18,13 @@ import type {
   InventoryIngredient,
   InventoryStockBalance,
   MenuRecipe,
+  Money,
   Order,
   RecipeComponent,
+} from "@warungmeng/domain";
+import {
+  areInventoryUnitsCompatible,
+  convertInventoryQuantity,
 } from "@warungmeng/domain";
 import type { LogicChildContext, OperationResult } from "@warungmeng/module-system";
 import {
@@ -56,6 +61,37 @@ import {
  */
 export function consumptionQuantity(component: RecipeComponent, orderedQuantity: number): number {
   return component.quantity * orderedQuantity * (1 + component.wastePercentage / 100);
+}
+
+/**
+ * Snapshots the ingredient's average cost in the movement's entered unit.
+ *
+ * D20: SOURCE wrote null, so every historical Dashboard COGS read had to price
+ * old consumption against today's average. A movement already records the unit
+ * and quantity that were consumed; storing the matching unit cost makes the row
+ * a stable cost event. The average is deliberately not rounded here (D11 remains
+ * a separate precision decision).
+ */
+export function consumptionUnitCost(
+  component: RecipeComponent,
+  ingredient: InventoryIngredient | undefined,
+): Money | null {
+  if (
+    ingredient === undefined ||
+    !areInventoryUnitsCompatible(component.unit, ingredient.baseUnit)
+  ) {
+    return null;
+  }
+
+  const baseUnitsPerMovementUnit = convertInventoryQuantity(
+    1,
+    component.unit,
+    ingredient.baseUnit,
+  );
+  return {
+    amount: ingredient.averageUnitCost.amount * baseUnitsPerMovementUnit,
+    currency: ingredient.averageUnitCost.currency,
+  };
 }
 
 /** Balances are keyed by the pair, not by ingredient alone. */
@@ -126,6 +162,7 @@ export function planOrderConsumption(
 
     for (const component of recipe.components) {
       const key = balanceKey(component.ingredientId, order.outletId);
+      const ingredient = ingredientById.get(component.ingredientId);
 
       const plan = planStockMovement(
         {
@@ -137,12 +174,13 @@ export function planOrderConsumption(
           // 0.01 floor do not apply. See `QuantitySource`.
           quantitySource: "derived",
           unit: component.unit,
-          unitCost: null,
+          // D20: preserve the sale-time average in the same unit as `quantity`.
+          unitCost: consumptionUnitCost(component, ingredient),
           referenceId: order.id,
           note: `POS ${order.orderNumber}`,
           occurredAt: order.createdAt,
         },
-        ingredientById.get(component.ingredientId) ?? null,
+        ingredient ?? null,
         runningBalances.get(key) ?? null,
         newMovementId(),
       );

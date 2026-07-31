@@ -38,6 +38,7 @@ import {
 import inventoryEngine from "../../inventoryEngine";
 import stockConsumptionChild, {
   consumptionQuantity,
+  consumptionUnitCost,
   planOrderConsumption,
 } from "./stockConsumptionChild";
 
@@ -399,7 +400,7 @@ describe("planning an order", () => {
     }
   });
 
-  it("stamps every row with the order's reference, note and creation time", () => {
+  it("stamps every row with its sale-time cost, order reference, note and creation time", () => {
     const plan = planOrderConsumption(
       order(),
       [recipe({ menuItemId: "m1" })],
@@ -413,8 +414,16 @@ describe("planning an order", () => {
       expect(row?.referenceId).toBe("o1");
       expect(row?.note).toBe("POS WM-001");
       expect(row?.occurredAt).toBe(CREATED);
-      expect(row?.unitCost).toBeNull();
+      expect(row?.unitCost).toEqual(IDR(100));
     }
+  });
+
+  it("stores cost in the movement unit without rounding the average", () => {
+    const rice = ingredient({ id: "i1", name: "Rice", averageUnitCost: IDR(12.345) });
+
+    expect(consumptionUnitCost(component({ ingredientId: "i1", unit: "kg" }), rice)).toEqual(
+      IDR(12_345),
+    );
   });
 
   it("names menu items that have no recipe instead of skipping them silently", () => {
