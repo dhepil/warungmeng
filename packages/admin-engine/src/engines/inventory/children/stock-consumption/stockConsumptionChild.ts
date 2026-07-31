@@ -22,10 +22,7 @@ import type {
   Order,
   RecipeComponent,
 } from "@warungmeng/domain";
-import {
-  areInventoryUnitsCompatible,
-  convertInventoryQuantity,
-} from "@warungmeng/domain";
+import { areInventoryUnitsCompatible, convertInventoryQuantity } from "@warungmeng/domain";
 import type { LogicChildContext, OperationResult } from "@warungmeng/module-system";
 import {
   defineLogicChild,
@@ -83,11 +80,7 @@ export function consumptionUnitCost(
     return null;
   }
 
-  const baseUnitsPerMovementUnit = convertInventoryQuantity(
-    1,
-    component.unit,
-    ingredient.baseUnit,
-  );
+  const baseUnitsPerMovementUnit = convertInventoryQuantity(1, component.unit, ingredient.baseUnit);
   return {
     amount: ingredient.averageUnitCost.amount * baseUnitsPerMovementUnit,
     currency: ingredient.averageUnitCost.currency,
@@ -239,17 +232,14 @@ function stockConsumptionOverStore(store: InventoryStorePort): StockConsumption 
           // SOURCE returned these rows and said nothing, so a caller could not
           // tell a replay from a fresh write — which is how its retry reported
           // success for an order it had not finished.
-          return operationDegraded(
-            { movements: already, replayed: true, skippedMenuItemIds: [] },
-            [
-              operationIssue(
-                CONSUMPTION_ISSUE.alreadyConsumed,
-                `Order ${order.orderNumber} has already been consumed; nothing was written.`,
-                order.id,
-                { movementCount: already.length },
-              ),
-            ],
-          );
+          return operationDegraded({ movements: already, replayed: true, skippedMenuItemIds: [] }, [
+            operationIssue(
+              CONSUMPTION_ISSUE.alreadyConsumed,
+              `Order ${order.orderNumber} has already been consumed; nothing was written.`,
+              order.id,
+              { movementCount: already.length },
+            ),
+          ]);
         }
 
         const [recipes, ingredients, balances] = await Promise.all([

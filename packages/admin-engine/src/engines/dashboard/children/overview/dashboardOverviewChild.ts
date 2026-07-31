@@ -4,10 +4,7 @@
 // three sibling areas at once. It consumes their published capabilities only;
 // no repository/store shape is restated in Dashboard (tech-debt D15).
 
-import type {
-  MaterialCollection,
-  MaterialsRead,
-} from "../../../inventory/inventoryContracts";
+import type { MaterialCollection, MaterialsRead } from "../../../inventory/inventoryContracts";
 import {
   DEFAULT_MATERIAL_LIST_FILTERS,
   MATERIALS_READ,
@@ -30,11 +27,7 @@ import {
   validateReportingPeriod,
   type ReportingSnapshot,
 } from "@warungmeng/domain";
-import type {
-  LogicChildContext,
-  OperationIssue,
-  OperationResult,
-} from "@warungmeng/module-system";
+import type { LogicChildContext, OperationIssue, OperationResult } from "@warungmeng/module-system";
 import {
   defineLogicChild,
   operationDegraded,
@@ -196,9 +189,7 @@ function overviewOverCapabilities(
       const outletId = validated.value;
 
       const [orderSource, financeSource, inventorySource] = await Promise.all([
-        loadSource("orders", () =>
-          orders.listOrders({ ...DEFAULT_ORDER_LIST_FILTERS, outletId }),
-        ),
+        loadSource("orders", () => orders.listOrders({ ...DEFAULT_ORDER_LIST_FILTERS, outletId })),
         loadSource("finance", () => ledger.listTransactions(outletId)),
         loadSource("inventory", () =>
           materials.queryMaterials({

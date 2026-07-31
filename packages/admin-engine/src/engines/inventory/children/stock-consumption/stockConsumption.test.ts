@@ -85,9 +85,7 @@ function component(
   };
 }
 
-function recipe(
-  overrides: Partial<MenuRecipe> & Pick<MenuRecipe, "menuItemId">,
-): MenuRecipe {
+function recipe(overrides: Partial<MenuRecipe> & Pick<MenuRecipe, "menuItemId">): MenuRecipe {
   return {
     components: [component({ ingredientId: "i1" })],
     packagingCost: IDR(0),
@@ -97,9 +95,7 @@ function recipe(
   };
 }
 
-function orderItem(
-  overrides: Partial<OrderItem> & Pick<OrderItem, "menuItemId">,
-): OrderItem {
+function orderItem(overrides: Partial<OrderItem> & Pick<OrderItem, "menuItemId">): OrderItem {
   return {
     id: `oi-${overrides.menuItemId}`,
     name: overrides.menuItemId,
@@ -247,10 +243,7 @@ describe("what a recipe component costs in stock", () => {
     // any unit's meaningful resolution, and the ledger records what was computed
     // rather than a tidied version of it.
     expect(
-      consumptionQuantity(
-        component({ ingredientId: "i1", quantity: 100, wastePercentage: 10 }),
-        2,
-      ),
+      consumptionQuantity(component({ ingredientId: "i1", quantity: 100, wastePercentage: 10 }), 2),
     ).toBeCloseTo(220, 10);
   });
 
@@ -571,7 +564,12 @@ describe("the child in a real runtime", () => {
 
   it("writes nothing when the order cannot be satisfied", async () => {
     const store = storeOver({
-      recipes: [recipe({ menuItemId: "m1", components: [component({ ingredientId: "i1", quantity: 500 })] })],
+      recipes: [
+        recipe({
+          menuItemId: "m1",
+          components: [component({ ingredientId: "i1", quantity: 500 })],
+        }),
+      ],
       ingredients: [ingredient({ id: "i1", name: "Rice" })],
       balances: [balance({ ingredientId: "i1", quantity: 100 })],
     });

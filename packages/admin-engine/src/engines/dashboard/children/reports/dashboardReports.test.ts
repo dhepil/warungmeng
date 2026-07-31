@@ -1,6 +1,12 @@
-// Protected Dashboard overview behavior through the real four-area graph.
+// Protected Dashboard reports behavior through the real four-area graph.
 
-import type { FinanceTransaction, InventoryIngredient, Money, Order } from "@warungmeng/domain";
+import type {
+  FinanceTransaction,
+  InventoryIngredient,
+  InventoryMovement,
+  Money,
+  Order,
+} from "@warungmeng/domain";
 import {
   defineLogicChild,
   operationDegraded,
@@ -15,16 +21,16 @@ import { createAdminEngine } from "../../../../createAdminEngine";
 import type { LedgerRead } from "../../../finance/financeContracts";
 import { LEDGER_READ, LEDGER_READ_ID } from "../../../finance/financeContracts";
 import financeEngine from "../../../finance/financeEngine";
-import type { MaterialCollection, MaterialsRead } from "../../../inventory/inventoryContracts";
-import { MATERIALS_READ, MATERIALS_READ_ID } from "../../../inventory/inventoryContracts";
+import type { MovementListItem, StockMovements } from "../../../inventory/inventoryContracts";
+import { STOCK_MOVEMENTS, STOCK_MOVEMENTS_ID } from "../../../inventory/inventoryContracts";
 import inventoryEngine from "../../../inventory/inventoryEngine";
 import type { OrderCollection, OrderRead } from "../../../orders/ordersContracts";
 import { ORDER_READ, ORDER_READ_ID } from "../../../orders/ordersContracts";
 import ordersEngine from "../../../orders/ordersEngine";
-import type { DashboardDataSource, DashboardOverview } from "../../dashboardContracts";
-import { DASHBOARD_OVERVIEW, DASHBOARD_OVERVIEW_ID } from "../../dashboardContracts";
+import type { DashboardDataSource, DashboardReports } from "../../dashboardContracts";
+import { DASHBOARD_REPORTS, DASHBOARD_REPORTS_ID } from "../../dashboardContracts";
 import dashboardEngine from "../../dashboardEngine";
-import dashboardOverviewChild from "./dashboardOverviewChild";
+import dashboardReportsChild from "./dashboardReportsChild";
 
 const IDR = (amount: number): Money => ({ amount, currency: "IDR" });
 const PERIOD = {
@@ -33,7 +39,7 @@ const PERIOD = {
   timeZone: "Asia/Jakarta",
 } as const;
 
-function order(overrides: Partial<Order> = {}): Order {
+function order(): Order {
   return {
     id: "order-1",
     orderNumber: "WM-001",
@@ -70,7 +76,6 @@ function order(overrides: Partial<Order> = {}): Order {
     createdAt: "2026-08-01T03:00:00.000Z",
     updatedAt: "2026-08-01T03:00:00.000Z",
     events: [],
-    ...overrides,
   };
 }
 
@@ -103,27 +108,45 @@ function ingredient(): InventoryIngredient {
     supplierId: null,
     status: "active",
     minimumStock: 2,
-    lastPurchaseUnitCost: IDR(15_000),
+    lastPurchaseUnitCost: IDR(14_000),
     averageUnitCost: IDR(14_000),
   };
 }
 
-function materialCollection(quantity = 1, hasBalanceRecord = true): MaterialCollection {
-  const material = ingredient();
+function movement(
+  overrides: Partial<InventoryMovement> & Pick<InventoryMovement, "id">,
+): InventoryMovement {
   return {
-    materials: [
-      {
-        ingredient: material,
-        outletId: "wm-1",
-        quantity,
-        hasBalanceRecord,
-        isLowStock: quantity <= material.minimumStock,
-        supplier: null,
-      },
-    ],
-    totalCount: 1,
-    lowStockCount: 1,
+    ingredientId: "ingredient-1",
+    outletId: "wm-1",
+    type: "consumption",
+    quantity: 2,
+    unit: "kg",
+    baseQuantityDelta: -2,
+    unitCost: IDR(14_000),
+    referenceId: "order-1",
+    note: "POS WM-001",
+    occurredAt: "2026-08-01T03:00:00.000Z",
+    ...overrides,
   };
+}
+
+function movementRows(): readonly MovementListItem[] {
+  const rice = ingredient();
+  return [
+    {
+      movement: movement({
+        id: "opening",
+        type: "purchase",
+        quantity: 10,
+        baseQuantityDelta: 10,
+        referenceId: "purchase-1",
+        occurredAt: "2026-07-31T03:00:00.000Z",
+      }),
+      ingredient: rice,
+    },
+    { movement: movement({ id: "consumption-1" }), ingredient: rice },
+  ];
 }
 
 function ordersOver(result: OperationResult<OrderCollection>): OrderRead {
@@ -133,15 +156,13 @@ function ordersOver(result: OperationResult<OrderCollection>): OrderRead {
   };
 }
 
-function materialsOver(
-  result: OperationResult<MaterialCollection>,
-  queryMaterials = vi.fn(async () => result),
-): MaterialsRead & { readonly queryMaterials: typeof queryMaterials } {
+function movementsOver(
+  result: OperationResult<readonly MovementListItem[]>,
+  queryMovements = vi.fn(async () => result),
+): StockMovements & { readonly queryMovements: typeof queryMovements } {
   return {
-    listIngredients: async () => operationSuccess([]),
-    listSuppliers: async () => operationSuccess([]),
-    listStockBalances: async () => operationSuccess([]),
-    queryMaterials,
+    listMovements: async () => operationSuccess([]),
+    queryMovements,
   };
 }
 
@@ -157,24 +178,23 @@ function ledgerOver(result: OperationResult<readonly FinanceTransaction[]>): Led
 interface RuntimeOptions {
   readonly missing?: DashboardDataSource;
   readonly orders?: OrderRead;
-  readonly materials?: MaterialsRead;
+  readonly movements?: StockMovements;
   readonly ledger?: LedgerRead;
 }
 
 function runtimeWith(options: RuntimeOptions = {}): {
-  readonly overview: DashboardOverview | undefined;
+  readonly reports: DashboardReports | undefined;
   readonly snapshot: AdminEngineSnapshot;
   readonly dispose: () => void;
 } {
-  let captured: DashboardOverview | undefined;
+  let captured: DashboardReports | undefined;
   const orderCapability =
     options.orders ?? ordersOver(operationSuccess({ orders: [order()], totalCount: 1 }));
-  const materialCapability =
-    options.materials ?? materialsOver(operationSuccess(materialCollection()));
+  const movementCapability = options.movements ?? movementsOver(operationSuccess(movementRows()));
   const ledgerCapability = options.ledger ?? ledgerOver(operationSuccess([sale()]));
 
   const orderProvider = defineLogicChild({
-    id: "admin.orders.dashboard-overview-provider",
+    id: "admin.orders.dashboard-reports-provider",
     parentId: ordersEngine.id,
     provides: [ORDER_READ_ID],
     create(context) {
@@ -182,15 +202,15 @@ function runtimeWith(options: RuntimeOptions = {}): {
     },
   });
   const inventoryProvider = defineLogicChild({
-    id: "admin.inventory.dashboard-overview-provider",
+    id: "admin.inventory.dashboard-reports-provider",
     parentId: inventoryEngine.id,
-    provides: [MATERIALS_READ_ID],
+    provides: [STOCK_MOVEMENTS_ID],
     create(context) {
-      context.capabilities.provide(MATERIALS_READ, materialCapability);
+      context.capabilities.provide(STOCK_MOVEMENTS, movementCapability);
     },
   });
   const financeProvider = defineLogicChild({
-    id: "admin.finance.dashboard-overview-provider",
+    id: "admin.finance.dashboard-reports-provider",
     parentId: financeEngine.id,
     provides: [LEDGER_READ_ID],
     create(context) {
@@ -198,17 +218,17 @@ function runtimeWith(options: RuntimeOptions = {}): {
     },
   });
   const probe = defineLogicChild({
-    id: "admin.dashboard.overview-probe",
+    id: "admin.dashboard.reports-probe",
     parentId: dashboardEngine.id,
-    requires: [DASHBOARD_OVERVIEW_ID],
+    requires: [DASHBOARD_REPORTS_ID],
     create(context) {
-      const resolution = context.capabilities.resolve(DASHBOARD_OVERVIEW);
+      const resolution = context.capabilities.resolve(DASHBOARD_REPORTS);
       if (resolution.status === "available") captured = resolution.value;
     },
   });
 
   const engines = [dashboardEngine];
-  const children = [dashboardOverviewChild, probe];
+  const children = [dashboardReportsChild, probe];
   if (options.missing !== "orders") {
     engines.push(ordersEngine);
     children.push(orderProvider);
@@ -223,20 +243,20 @@ function runtimeWith(options: RuntimeOptions = {}): {
   }
 
   const runtime = createAdminEngine({ definitions: { engines, children } });
-  return { overview: captured, snapshot: runtime.getSnapshot(), dispose: runtime.dispose };
+  return { reports: captured, snapshot: runtime.getSnapshot(), dispose: runtime.dispose };
 }
 
-describe("Dashboard overview graph", () => {
+describe("Dashboard reports graph", () => {
   it("publishes the LOGIC section 8 id with all three requirements verbatim", () => {
-    expect(dashboardOverviewChild.provides).toEqual([DASHBOARD_OVERVIEW_ID]);
-    expect(dashboardOverviewChild.requires).toEqual([
+    expect(dashboardReportsChild.provides).toEqual([DASHBOARD_REPORTS_ID]);
+    expect(dashboardReportsChild.requires).toEqual([
       ORDER_READ_ID,
-      MATERIALS_READ_ID,
+      STOCK_MOVEMENTS_ID,
       LEDGER_READ_ID,
     ]);
 
     const runtime = runtimeWith();
-    expect(runtime.overview).toBeDefined();
+    expect(runtime.reports).toBeDefined();
     runtime.dispose();
   });
 
@@ -245,137 +265,136 @@ describe("Dashboard overview graph", () => {
     (missing) => {
       const runtime = runtimeWith({ missing });
 
-      expect(runtime.overview).toBeUndefined();
+      expect(runtime.reports).toBeUndefined();
       expect(
         runtime.snapshot.areas.find((area) => area.engineId === dashboardEngine.id)
           ?.unavailableChildIds,
-      ).toContain(DASHBOARD_OVERVIEW_ID);
+      ).toContain(DASHBOARD_REPORTS_ID);
       runtime.dispose();
     },
   );
 });
 
-describe("Dashboard overview loading", () => {
-  it("composes four areas and delegates the report projections to the domain", async () => {
-    const queryMaterials = vi.fn(async () => operationSuccess(materialCollection()));
-    const materials = materialsOver(operationSuccess(materialCollection()), queryMaterials);
-    const runtime = runtimeWith({ materials });
+describe("Dashboard reports loading", () => {
+  it("composes sales, menu, and inventory reports through the domain selectors", async () => {
+    const queryMovements = vi.fn(async () => operationSuccess(movementRows()));
+    const movements = movementsOver(operationSuccess(movementRows()), queryMovements);
+    const runtime = runtimeWith({ movements });
 
-    const result = await runtime.overview?.loadOverview({ period: PERIOD });
+    const result = await runtime.reports?.loadReports({ period: PERIOD });
 
     expect(result).toMatchObject({
       status: "success",
       value: {
-        outletId: "wm-1",
         failedSources: [],
-        summary: {
-          grossSales: { amount: 20_000 },
-          paidOrderCount: 1,
-          missingCostItemCount: 1,
-          lowStockIngredientCount: 1,
-        },
-        lowStockIngredients: [{ ingredientId: "ingredient-1", currentStock: 1 }],
-        isEmpty: false,
+        dailyNetRevenueTotal: 20_000,
+        menuPerformance: [
+          { menuItemId: "menu-1", menuName: "Nasi", quantitySold: 1, missingCost: true },
+        ],
+        inventoryUsage: [
+          {
+            ingredientId: "ingredient-1",
+            quantityUsed: 2,
+            estimatedUsageValue: { amount: 28_000 },
+            currentStock: 8,
+            lowStock: false,
+          },
+        ],
+        isSalesEmpty: false,
+        isMenuEmpty: false,
+        isInventoryEmpty: false,
       },
     });
-    expect(queryMaterials).toHaveBeenCalledWith({
-      search: "",
-      status: "active",
+    expect(queryMovements).toHaveBeenCalledWith({
+      ingredientId: null,
       outletId: "wm-1",
-      lowStockOnly: false,
+      type: "all",
     });
     runtime.dispose();
   });
 
-  it("keeps Inventory's missing-balance-as-zero rule in the domain projection", async () => {
+  it("degrades per source while keeping healthy sales and inventory", async () => {
     const runtime = runtimeWith({
-      materials: materialsOver(operationSuccess(materialCollection(0, false))),
-    });
-
-    const result = await runtime.overview?.loadOverview({ period: PERIOD });
-
-    expect(result?.status).toBe("success");
-    if (result?.status === "success") {
-      expect(result.value.lowStockIngredients).toMatchObject([
-        { ingredientId: "ingredient-1", currentStock: 0 },
-      ]);
-      expect(result.value.summary.lowStockIngredientCount).toBe(1);
-    }
-    runtime.dispose();
-  });
-
-  it("degrades per source and keeps every healthy source", async () => {
-    const runtime = runtimeWith({
-      ledger: ledgerOver(
-        operationFailure("failed", [operationIssue("finance-offline", "Finance offline")]),
+      orders: ordersOver(
+        operationFailure("failed", [operationIssue("orders-offline", "Orders offline")]),
       ),
     });
 
-    const result = await runtime.overview?.loadOverview({ period: PERIOD });
+    const result = await runtime.reports?.loadReports({ period: PERIOD });
 
     expect(result?.status).toBe("degraded");
     if (result?.status === "degraded") {
-      expect(result.value.failedSources).toEqual(["finance"]);
-      expect(result.value.summary.lowStockIngredientCount).toBe(1);
-      expect(result.value.summary.paidOrderCount).toBe(0);
-      expect(result.issues.some((issue) => issue.code === "finance-offline")).toBe(true);
+      expect(result.value.failedSources).toEqual(["orders"]);
+      expect(result.value.dailyNetRevenueTotal).toBe(20_000);
+      expect(result.value.inventoryUsage).toHaveLength(1);
+      expect(result.issues.some((issue) => issue.code === "orders-offline")).toBe(true);
     }
     runtime.dispose();
   });
 
-  it("propagates a usable upstream degradation without discarding its value", async () => {
+  it("keeps a usable upstream degradation and names its source", async () => {
     const runtime = runtimeWith({
       ledger: ledgerOver(
-        operationDegraded(
-          [sale()],
-          [operationIssue("manual-finance-missing", "Manual rows absent")],
-        ),
+        operationDegraded([sale()], [operationIssue("manual-rows-missing", "Manual rows absent")]),
       ),
     });
 
-    const result = await runtime.overview?.loadOverview({ period: PERIOD });
+    const result = await runtime.reports?.loadReports({ period: PERIOD });
 
     expect(result).toMatchObject({
       status: "degraded",
-      value: { failedSources: ["finance"], summary: { grossSales: { amount: 20_000 } } },
+      value: { failedSources: ["finance"], dailyNetRevenueTotal: 20_000 },
     });
     runtime.dispose();
   });
 
-  it("fails instead of fabricating an empty dashboard when every source fails", async () => {
-    const failed = operationFailure("failed", [operationIssue("offline", "Offline")]);
+  it("surfaces legacy cost gaps and dangling movement ingredients without dropping rows", async () => {
+    const dangling = movement({ id: "legacy", unitCost: null });
     const runtime = runtimeWith({
-      orders: ordersOver(failed),
-      materials: materialsOver(failed),
-      ledger: ledgerOver(failed),
+      movements: movementsOver(operationSuccess([{ movement: dangling, ingredient: null }])),
     });
 
-    const result = await runtime.overview?.loadOverview({ period: PERIOD });
+    const result = await runtime.reports?.loadReports({ period: PERIOD });
 
-    expect(result?.status).toBe("failure");
-    if (result?.status === "failure") {
-      expect(result.reason).toBe("failed");
-      expect(result.issues[0]?.code).toBe("dashboard-all-sources-unavailable");
+    expect(result?.status).toBe("degraded");
+    if (result?.status === "degraded") {
+      expect(result.value.failedSources).toEqual(["inventory"]);
+      expect(result.value.inventoryUsage).toEqual([]);
       expect(result.issues.map((issue) => issue.code)).toEqual(
         expect.arrayContaining([
-          "dashboard-orders-unavailable",
-          "dashboard-finance-unavailable",
-          "dashboard-inventory-unavailable",
+          "dashboard-movement-ingredient-missing",
+          "dashboard-consumption-cost-missing",
         ]),
       );
     }
     runtime.dispose();
   });
 
-  it("rejects an invalid period before reading any source", async () => {
-    const listOrders = vi.fn(async () => operationSuccess({ orders: [], totalCount: 0 }));
-    const orders: OrderRead = {
-      listOrders,
-      getOrderById: async () => operationFailure("not-found", []),
-    };
-    const runtime = runtimeWith({ orders });
+  it("fails rather than fabricating reports when every source fails", async () => {
+    const failed = operationFailure("failed", [operationIssue("offline", "Offline")]);
+    const runtime = runtimeWith({
+      orders: ordersOver(failed),
+      movements: movementsOver(failed),
+      ledger: ledgerOver(failed),
+    });
 
-    const result = await runtime.overview?.loadOverview({
+    const result = await runtime.reports?.loadReports({ period: PERIOD });
+
+    expect(result?.status).toBe("failure");
+    if (result?.status === "failure") {
+      expect(result.reason).toBe("failed");
+      expect(result.issues[0]?.code).toBe("dashboard-all-sources-unavailable");
+    }
+    runtime.dispose();
+  });
+
+  it("rejects invalid periods before reading any source", async () => {
+    const listOrders = vi.fn(async () => operationSuccess({ orders: [], totalCount: 0 }));
+    const runtime = runtimeWith({
+      orders: { listOrders, getOrderById: async () => operationFailure("not-found", []) },
+    });
+
+    const result = await runtime.reports?.loadReports({
       period: { ...PERIOD, startDate: "2026-08-02" },
     });
 

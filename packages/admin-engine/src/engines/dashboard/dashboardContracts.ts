@@ -34,6 +34,7 @@ export const DASHBOARD_ISSUE = {
   financeUnavailable: "dashboard-finance-unavailable",
   inventoryUnavailable: "dashboard-inventory-unavailable",
   missingMovementIngredient: "dashboard-movement-ingredient-missing",
+  missingConsumptionCost: "dashboard-consumption-cost-missing",
 } as const;
 
 export interface DashboardLoadInput {
@@ -62,8 +63,7 @@ export interface DashboardOverview {
 }
 
 export const DASHBOARD_OVERVIEW_ID = "admin.dashboard.overview";
-export const DASHBOARD_OVERVIEW =
-  createCapabilityToken<DashboardOverview>(DASHBOARD_OVERVIEW_ID);
+export const DASHBOARD_OVERVIEW = createCapabilityToken<DashboardOverview>(DASHBOARD_OVERVIEW_ID);
 
 export interface DashboardReportsSnapshot extends DashboardLoadState {
   readonly dailySalesTrend: readonly DailySalesTrendPoint[];
