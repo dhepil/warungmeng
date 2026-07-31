@@ -192,7 +192,14 @@ function stored(record: Omit<Order, "id">): Order {
   return { ...record, id: "order-1" };
 }
 
-function ordersOver(options: { replayed?: boolean; fails?: boolean } = {}): OrderSubmission & {
+function ordersOver(
+  options: {
+    replayed?: boolean;
+    fails?: boolean;
+    /** The store returns the STORED order, which may have moved on since it was written. */
+    storedPaymentStatus?: Order["paymentStatus"];
+  } = {},
+): OrderSubmission & {
   readonly keys: string[];
 } {
   const keys: string[] = [];
@@ -203,7 +210,14 @@ function ordersOver(options: { replayed?: boolean; fails?: boolean } = {}): Orde
       if (options.fails) {
         return operationFailure("failed", [operationIssue("orders-store-failed", "down")]);
       }
-      const outcome = { order: stored(input.order), replayed: options.replayed === true };
+      const outcome = {
+        order: stored(
+          options.storedPaymentStatus
+            ? { ...input.order, paymentStatus: options.storedPaymentStatus }
+            : input.order,
+        ),
+        replayed: options.replayed === true,
+      };
       return options.replayed
         ? operationDegraded(outcome, [operationIssue("order-submission-replayed", "replay")])
         : operationSuccess(outcome);
@@ -458,6 +472,45 @@ describe("POS checkout behavior", () => {
     ]);
     // D23: finance capability is required, but manual writer is never called; sale
     // derives from committed paid order with deterministic finance id.
+    expect(manualFinance).not.toHaveBeenCalled();
+    runtime.dispose();
+  });
+
+  it("rolls back when the committed order does not derive exactly one sale", async () => {
+    // A mutation round found the D23 guard unprotected: deleting the check that the
+    // projection yields exactly one `sale` row left all 16 tests passing. Asserting
+    // only "the manual writer was not called" proves there is no SECOND writer, but
+    // says nothing about the row the runtime actually relies on.
+    //
+    // The guard is reachable, not defensive padding. Checkout stamps `paid`, but the
+    // store returns the STORED order, and on an idempotent replay that order may have
+    // been cancelled since it was written — the domain settles paid → refunded on
+    // cancellation (orders.ts), and a refunded order projects TWO rows (sale + refund).
+    // Deriving the till's sale from that silently books a refund the cash drawer never
+    // paid out, which is exactly the ledger/till disagreement D23 exists to prevent.
+    const atomic = atomicOver();
+    const inventory = inventoryOver();
+    const cart = cartOver();
+    const manualFinance = vi.fn();
+    const runtime = runtimeWith({
+      orders: ordersOver({ storedPaymentStatus: "refunded" }),
+      inventory,
+      cart,
+      atomic,
+      finance: financeOver(manualFinance),
+    });
+
+    const result = await runtime.checkout!.submitCheckout(checkoutInput());
+
+    expect(result.status).toBe("failure");
+    expect(
+      result.status === "failure" &&
+        result.issues.some((issue) => issue.code === POS_ISSUE.financeFailed),
+    ).toBe(true);
+    // Refusing after the first write must roll every owner back, and must not
+    // finalize the till: no cart clear, no cash-sale increment, no manual write.
+    expect(atomic.rollbacks).toHaveLength(1);
+    expect(cart.clears).toHaveLength(0);
     expect(manualFinance).not.toHaveBeenCalled();
     runtime.dispose();
   });
