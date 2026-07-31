@@ -29,8 +29,8 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 3 | menu — catalog-read, menu-editor, variant-management | done — 69b560d, d14ffb5, 8513852 |
 | 4 | inventory A — materials-read, stock-movements, stock-adjustment | done — 9b9fad9, 69628a7, 0af1ccf |
 | 5 | inventory B — stock-consumption, stock-reversal, hpp-calculation | done — 47ece49, 65a064f, ba49026, a19ba0a |
-| 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | next |
-| 7 | orders — order-read, order-submission | |
+| 6 | finance — ledger-read, transaction-recording, expense-management, refund-projection | done — 6d603b5, 40d2308, 9b91302, 0dc6370, 77ffed8, 9f67f13 |
+| 7 | orders — order-read, order-submission | next |
 | 8 | orders — order-cancellation + `cancelOrderAtomically` | |
 | 9 | pos — session, cart | |
 | 10 | pos — checkout + `submitPosCheckoutAtomically` | |
@@ -335,6 +335,58 @@ as `roadmap.md` requires.
   up to 500" was the product's pricing rule expressed as the domain's default
   parameters at a single call site. It is `HPP_TARGET_MARGIN_PERCENTAGE` and
   `HPP_PRICE_ROUNDING_STEP` now. Same class of problem as rules in form props.
+
+## Decisions locked during S6 (finance)
+
+- **Finance's automatic ledger is derived, not stored.** The store owns only rows a
+  person entered. Sales and refunds are projected from orders at read time with
+  deterministic ids, so the same sale cannot be recorded twice and there is no
+  persisted refund write. Do not add automatic rows to `FinanceStorePort`; that
+  would create two writers for one fact. This is why the store and order reader
+  are separate ports and why refund-projection is pure.
+- **A source is allowed to fail only when another source produced a trustworthy
+  dataset.** SOURCE loaded orders and manual rows in one `Promise.all`, so either
+  failure blanked the whole ledger. The target degrades and keeps the healthy side.
+  But if EVERY configured source fails, it returns failure — an empty array made by
+  fallback initialization is not a usable ledger. Mutation-tested.
+- **One calendar-day rule: Jakarta.** SOURCE made date presets in the machine's
+  local zone, expanded date-only filters as UTC, and reporting used Jakarta. A
+  transaction near midnight could fall outside the preset that selected its day.
+  Both preset and filtering now use the domain's Jakarta date-key projection.
+- **The write is the judge; do not pre-read editability.** Update and void store
+  methods return tagged authoritative outcomes. SOURCE's `null` conflated missing,
+  automatic and voided edits, and its void returned the row alone so fresh versus
+  replayed was unknowable. A pre-read would be a second judge plus a race. The
+  write decides and commits, and a void reports `alreadyVoided`.
+- **Unknown categories are invalid; custom categories are explicit.** The domain
+  checks direction only when it recognizes a category id, so an invented id skipped
+  the rule entirely. SOURCE relied on its dropdown clearing selection — a screen
+  preventing a mistake, not a rule. `CUSTOM_CATEGORY_SELECTION` is the sole door
+  into custom labels; built-in ids must exist and match direction.
+- **Rules hidden in the finance form moved into logic.** Whole non-negative IDR,
+  attachment image/PDF ≤5 MB, description ≤300, reference ≤80, custom category
+  name ≤80, and direction→transaction-type mapping. Three domain types remain
+  unreachable by design; tech-debt D24 says when to revisit.
+- **Expense-management is deliberately thin and has no sibling edge.** SOURCE's
+  expense screen was the general transaction screen with outflow forced and a
+  breakdown added. LOGIC §8 gives the child no requirement, so it neither imports
+  nor resolves ledger-read/transaction-recording. It projects posted outflows from
+  rows a caller already read. This also fixes SOURCE's mismatch where pending and
+  voided rows appeared in the table but were excluded from its total.
+- **Refundable means money, never stock.** Refund-projection answers whether a paid
+  order settled as refunded and carries the deterministic refund rows. It cannot
+  know whether stock was consumed. Slice 8 must act on D18 explicitly and must not
+  reuse `refundable` as the stock-reversal gate.
+- **POS's finance requirement is unresolved behavior, not a missing method to
+  invent.** LOGIC §8 requires transaction-recording; SOURCE checkout never called
+  Finance because its sale was derived. Tech-debt D23 belongs to slice 10. Do not
+  persist a duplicate sale to satisfy the graph mechanically.
+- **A contracts pass must remove dead adapter surface.** S6's first scaffold copied
+  SOURCE's production-unused `getManualTransactionById`, an unnecessary exposed id
+  generator, and a store-side query. All were removed before slice close. It also
+  caught `ManualTransactionRecord` restating a domain type and replaced it with an
+  alias. Extend this discipline to every later area: a repository method is not a
+  port method merely because SOURCE had it.
 
 ## The area-slice pattern (established by slice 3 — copy it)
 

@@ -510,3 +510,92 @@ still do it. A dedicated `reversal` movement type would close it completely, but
 
 **Revisit at:** whenever the domain is next open. One new union member and one
 constant.
+
+---
+
+## D23 — POS is required to call a finance writer SOURCE never called · `open`
+
+**Found:** P3 S6, while mapping the finance capability graph. **Slice 10.**
+
+LOGIC §8 says `admin.pos.checkout` requires
+`admin.finance.transaction-recording`. SOURCE's POS checkout did not touch
+Finance at all: it created the order and consumed stock. The sale appeared in the
+ledger because Finance derived it from the stored order, using a deterministic id;
+there was no finance write to retry or de-duplicate.
+
+**Why it was not invented here:** `transaction-recording` faithfully owns SOURCE's
+manual create/edit/void behavior. Adding a second method now solely because a later
+child is said to require the capability would invent what it does before the
+checkout workflow exists. Worse, persisting a sale while still deriving the same
+sale from its order creates two writers for one fact and makes de-duplication
+load-bearing.
+
+**What it costs to leave until slice 10:** nothing at runtime yet — POS checkout is
+not built. Slice 10 cannot be completed by blindly calling the manual-entry method;
+it must reconcile the graph edge with the derived-ledger design.
+
+**Action for slice 10:** decide the legitimate call. Strong default: keep the sale
+derived and make the capability acknowledge/project the committed order rather
+than store a duplicate, but verify that against the atomic checkout contract before
+coding. The operation must report fresh versus replayed if it can be retried.
+
+---
+
+## D24 — Three manual finance transaction types have no write path · `accepted`
+
+**Found:** P3 S6, from the rule hidden in the transaction dialog's submit handler.
+
+The domain accepts `cash-in`, `cash-out`, and `adjustment`, but SOURCE's only
+manual-transaction screen derived the type from direction with one ternary:
+inflow became `manual-income`, outflow became `expense`. Nothing could create the
+other three. The rule is now named, but the types remain unreachable.
+
+**Why it is accepted:** making them selectable is a feature, not a port. It needs a
+product definition of how cash-in differs from manual income, how cash-out differs
+from expense, and whether adjustment changes only cash balance or the whole
+cashflow. Exposing labels without those semantics would pretend the decision was
+made.
+
+**Revisit at:** P5, when the finance editor UI is built and the owner can judge a
+concrete workflow rather than a union member.
+
+---
+
+## D25 — The finance ledger defaults to one hardcoded outlet · `open`
+
+**Found:** P3 S6.
+
+SOURCE always loaded orders with `outletId: "wm-1"`, so sales and refunds from any
+other outlet were silently absent from Finance. The destination preserves `wm-1`
+as `DEFAULT_FINANCE_OUTLET_ID` so the current view does not change, but callers may
+override it explicitly.
+
+**What it costs to fix:** decide whether Finance is per-outlet or consolidated. A
+consolidated ledger removes the filter; a per-outlet ledger needs the active outlet
+as composition/application state rather than a package constant.
+
+**What it costs to leave:** a future multi-outlet deployment can understate revenue
+unless every caller remembers to pass the outlet. Today the seeds and SOURCE
+behavior are single-outlet, so this does not block P3.
+
+**Revisit at:** P6 application composition, when outlet/session state has a real
+owner.
+
+---
+
+## D26 — Custom finance category ids can collide · `accepted`
+
+**Found:** P3 S6.
+
+A custom category id is `custom:` plus a slug of its label. Different labels such
+as `"Sewa & Kios"` and `"Sewa Kios"` can become the same id, and the expense
+breakdown groups by id, so their totals merge while retaining whichever label was
+seen first. SOURCE used the same convention.
+
+**Why it is accepted:** Finance has no category repository or category editor; a
+custom label is stored directly on each transaction. Giving categories durable
+identity would be a new entity and migration, not a safer slug function. The id is
+at least deterministic, and the visible label remains on every row.
+
+**Revisit at:** if P5 introduces a persistent custom-category manager. Then ids
+should be generated once and labels edited independently.
