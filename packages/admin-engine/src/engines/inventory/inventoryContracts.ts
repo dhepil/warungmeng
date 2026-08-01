@@ -30,10 +30,7 @@ import type {
   Order,
 } from "@warungmeng/domain";
 import type { OperationIssue, OperationResult } from "@warungmeng/module-system";
-import {
-  createCapabilityToken,
-  createOutboundPortToken,
-} from "@warungmeng/module-system";
+import { createCapabilityToken, createOutboundPortToken } from "@warungmeng/module-system";
 
 // ─── Rules lifted out of the SOURCE form components ──────────────────────────
 //
@@ -158,9 +155,7 @@ export interface StockMovementCommit {
 export interface InventoryStorePort {
   listIngredients(): Promise<readonly InventoryIngredient[]>;
   getIngredientById(id: string): Promise<InventoryIngredient | null>;
-  createIngredient(
-    input: InventoryCreateInput<InventoryIngredient>,
-  ): Promise<InventoryIngredient>;
+  createIngredient(input: InventoryCreateInput<InventoryIngredient>): Promise<InventoryIngredient>;
   updateIngredient(
     id: string,
     patch: InventoryIngredientPatch,
@@ -234,9 +229,8 @@ export interface MovementStoreQuery {
  * children still load and still publish their capabilities, and every call
  * returns a normalized failure instead of throwing.
  */
-export const INVENTORY_STORE_PORT = createOutboundPortToken<InventoryStorePort>(
-  "admin.inventory.store",
-);
+export const INVENTORY_STORE_PORT =
+  createOutboundPortToken<InventoryStorePort>("admin.inventory.store");
 
 // ─── Read contracts (child: materials-read) ──────────────────────────────────
 
@@ -691,3 +685,106 @@ export interface HppCalculation {
 export const HPP_CALCULATION_ID = "admin.inventory.hpp-calculation";
 
 export const HPP_CALCULATION = createCapabilityToken<HppCalculation>(HPP_CALCULATION_ID);
+
+// ─── Historical profit read (child: historical-item-profit) ──────────────────
+
+/**
+ * One calendar for every historical projection in Admin.
+ *
+ * The query exposes date keys, not instants. The child turns them into this
+ * domain-owned calendar before selecting either orders or movements, so a sale
+ * around midnight cannot belong to different days in Inventory and Dashboard.
+ */
+export { DEFAULT_REPORTING_TIME_ZONE as HISTORICAL_ITEM_PROFIT_TIME_ZONE } from "@warungmeng/domain";
+
+/** The three independently loaded inputs to the reconstruction. Stable order. */
+export const HISTORICAL_ITEM_PROFIT_SOURCES = ["orders", "movements", "recipes"] as const;
+
+export type HistoricalItemProfitSource = (typeof HISTORICAL_ITEM_PROFIT_SOURCES)[number];
+
+/**
+ * These literals travel with every collection so callers cannot present the
+ * result as measured order-item cost.
+ */
+export const HISTORICAL_ITEM_PROFIT_ATTRIBUTION = "recipe-proportional-reconstruction" as const;
+export const HISTORICAL_ITEM_PROFIT_RECIPE_ASSUMPTION = "current-recipe-assumed-unchanged" as const;
+
+/** Named reasons a historical row or one of its sources is incomplete. */
+export const HISTORICAL_ITEM_PROFIT_ISSUE = {
+  invalidPeriod: "invalid-historical-item-profit-period",
+  invalidOutlet: "invalid-historical-item-profit-outlet",
+  invalidMenuItem: "invalid-historical-item-profit-menu-item",
+  dependencyUnavailable: "historical-item-profit-dependency-unavailable",
+  allSourcesUnavailable: "historical-item-profit-all-sources-unavailable",
+  ordersUnavailable: "historical-item-profit-orders-unavailable",
+  movementsUnavailable: "historical-item-profit-movements-unavailable",
+  recipesUnavailable: "historical-item-profit-recipes-unavailable",
+  missingRecipe: "historical-item-profit-recipe-missing",
+  missingConsumption: "historical-item-profit-consumption-missing",
+  missingConsumptionCost: "historical-item-profit-consumption-cost-unknown",
+  unattributedConsumption: "historical-item-profit-consumption-unattributed",
+  consumptionQuantityMismatch: "historical-item-profit-consumption-quantity-mismatch",
+  incompatibleUnit: "historical-item-profit-unit-incompatible",
+  currencyMismatch: "historical-item-profit-currency-mismatch",
+  reconstructionFailed: "historical-item-profit-reconstruction-failed",
+} as const;
+
+export interface HistoricalItemProfitQuery {
+  readonly outletId: string;
+  /** Inclusive Jakarta calendar date. */
+  readonly dateFrom: string;
+  /** Inclusive Jakarta calendar date. */
+  readonly dateTo: string;
+  /** Null or omitted means every menu item. */
+  readonly menuItemId?: string | null;
+}
+
+export type HistoricalCostStatus = "known" | "unknown";
+
+/**
+ * Historical sales and reconstructed sale-time cost for one menu item.
+ *
+ * `reconstructedCost` is deliberately nullable. A missing pre-S11 snapshot is
+ * UNKNOWN, never zero: zero would read as a fully measured free ingredient and
+ * produce a plausible but false pure-profit row. If any included order item is
+ * unknown, the aggregate cost and profit are both null rather than partial.
+ */
+export interface HistoricalItemProfitRow {
+  readonly menuItemId: string;
+  /** Sale-time name from the newest included order item. Names are not identities. */
+  readonly menuName: string;
+  readonly quantitySold: number;
+  readonly orderItemCount: number;
+  readonly unknownOrderItemCount: number;
+  readonly revenue: Money;
+  readonly reconstructedCost: Money | null;
+  readonly reconstructedProfit: Money | null;
+  readonly costStatus: HistoricalCostStatus;
+  readonly issues: readonly OperationIssue[];
+}
+
+/**
+ * The result says what it is and what makes it temporarily exact.
+ *
+ * Movements point only to an order. Their split across menu items is inferred by
+ * current recipe proportions; it is not a recorded attribution. This remains
+ * exact only while D16 keeps recipes read-only. When recipe editing ships in P5,
+ * this assumption and recipe versioning must be reviewed together.
+ */
+export interface HistoricalItemProfitCollection {
+  readonly attribution: typeof HISTORICAL_ITEM_PROFIT_ATTRIBUTION;
+  readonly recipeAssumption: typeof HISTORICAL_ITEM_PROFIT_RECIPE_ASSUMPTION;
+  readonly failedSources: readonly HistoricalItemProfitSource[];
+  readonly items: readonly HistoricalItemProfitRow[];
+}
+
+export interface HistoricalItemProfit {
+  queryHistoricalItemProfits(
+    query: HistoricalItemProfitQuery,
+  ): Promise<OperationResult<HistoricalItemProfitCollection>>;
+}
+
+export const HISTORICAL_ITEM_PROFIT_ID = "admin.inventory.historical-item-profit";
+
+export const HISTORICAL_ITEM_PROFIT =
+  createCapabilityToken<HistoricalItemProfit>(HISTORICAL_ITEM_PROFIT_ID);

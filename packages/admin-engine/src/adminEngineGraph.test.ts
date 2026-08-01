@@ -57,7 +57,7 @@ const EXPECTED_ENGINE_IDS = [
 ] as const;
 
 /**
- * All 24 children, by child id — the id of the DEFINITION, which is not always
+ * All 25 children, by child id — the id of the DEFINITION, which is not always
  * the id of the capability it publishes.
  */
 const EXPECTED_CHILD_IDS = [
@@ -67,6 +67,7 @@ const EXPECTED_CHILD_IDS = [
   "admin.finance.ledger-read",
   "admin.finance.refund-projection",
   "admin.finance.transaction-recording",
+  "admin.inventory.historical-item-profit",
   "admin.inventory.hpp-calculation",
   "admin.inventory.materials-read",
   "admin.inventory.stock-adjustment",
@@ -112,6 +113,7 @@ const EXPECTED_CAPABILITY_BY_CHILD: Readonly<Record<string, string>> = {
   "admin.finance.ledger-read": "admin.finance.ledger-read",
   "admin.finance.refund-projection": "admin.finance.refund-projection",
   "admin.finance.transaction-recording": "admin.finance.transaction-recording",
+  "admin.inventory.historical-item-profit": "admin.inventory.historical-item-profit",
   "admin.inventory.hpp-calculation": "admin.inventory.hpp-calculation",
   "admin.inventory.materials-read": "admin.inventory.materials-read",
   "admin.inventory.stock-adjustment": "admin.inventory.stock-adjustment",
@@ -135,7 +137,7 @@ const EXPECTED_CAPABILITY_BY_CHILD: Readonly<Record<string, string>> = {
 /**
  * The LOGIC §8 capability graph, verbatim, including the order the doc lists.
  *
- * Six children have requirements. The other eighteen have none, and that is
+ * Seven children have requirements. The other eighteen have none, and that is
  * asserted too — an invented edge is as much a departure from the doc as a
  * missing one, and it would quietly make a child unavailable in a runtime the
  * doc says should work.
@@ -156,6 +158,7 @@ const EXPECTED_REQUIREMENTS: Readonly<Record<string, readonly string[]>> = {
     "admin.inventory.stock-movements",
     "admin.finance.ledger-read",
   ],
+  "admin.inventory.historical-item-profit": ["admin.orders.read"],
   "admin.inventory.hpp-calculation": ["admin.menu.catalog-read"],
   "admin.orders.order-cancellation": [
     "admin.orders.read",
@@ -320,10 +323,10 @@ describe("Admin discovery finds every planned engine and child on disk", () => {
     ]);
   });
 
-  it("discovers exactly the 24 planned children, by id and not by count", () => {
+  it("discovers exactly the 25 planned children, by id and not by count", () => {
     const discovered = discoverAdminLogic();
 
-    // A set comparison, not `toHaveLength(24)`. A child file renamed to another
+    // A set comparison, not `toHaveLength(25)`. A child file renamed to another
     // allowed glob (`fooChild.ts` → `foo.test.ts`) keeps structure green and
     // loads as NOTHING; the count would move only on an outright deletion, which
     // structure already catches. This assertion names the child that vanished.
@@ -408,7 +411,7 @@ describe("every capability id matches LOGIC §8 verbatim", () => {
 // ─── 3. The requirement graph ────────────────────────────────────────────────
 
 describe("the requirement graph is exactly LOGIC §8", () => {
-  it("the six children with requirements declare exactly the doc's edges, in order", () => {
+  it("the seven children with requirements declare exactly the doc's edges, in order", () => {
     const discovered = discoverAdminLogic();
 
     for (const [childId, expected] of Object.entries(EXPECTED_REQUIREMENTS)) {
@@ -486,7 +489,7 @@ describe("a fully composed runtime is healthy and silent", () => {
     runtime.dispose();
   });
 
-  it("publishes all 24 area capabilities plus the republished atomic boundary", () => {
+  it("publishes all 25 area capabilities plus the republished atomic boundary", () => {
     const runtime = composeAdmin();
 
     expect(sorted(runtime.getSnapshot().runtime.capabilities)).toEqual(
@@ -520,7 +523,7 @@ describe("a fully composed runtime is healthy and silent", () => {
     const runtime = composeAdmin();
     const order = runtime.getSnapshot().runtime.initializationOrder;
 
-    // 24 area children plus the atomic bridge.
+    // 25 area children plus the atomic bridge.
     expect(order).toHaveLength(EXPECTED_CHILD_IDS.length + 1);
 
     const positionOf = new Map<string, number>(

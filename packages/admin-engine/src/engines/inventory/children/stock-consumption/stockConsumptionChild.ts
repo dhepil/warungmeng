@@ -45,20 +45,9 @@ import {
   STOCK_CONSUMPTION,
   STOCK_CONSUMPTION_ID,
 } from "../../inventoryContracts";
-import { planStockMovement } from "../../inventoryOperations";
+import { consumptionQuantity, planStockMovement } from "../../inventoryOperations";
 
 // ─── What a recipe component costs in stock ───────────────────────────────────
-
-/**
- * SOURCE's arithmetic, unchanged:
- * `component.quantity * item.quantity * (1 + wastePercentage / 100)`.
- *
- * Waste is applied per unit ordered, in the component's own unit; the conversion
- * into the ingredient's base unit happens inside `planStockMovement`.
- */
-export function consumptionQuantity(component: RecipeComponent, orderedQuantity: number): number {
-  return component.quantity * orderedQuantity * (1 + component.wastePercentage / 100);
-}
 
 /**
  * Snapshots the ingredient's average cost in the movement's entered unit.

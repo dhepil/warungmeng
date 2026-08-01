@@ -36,8 +36,8 @@ import {
   STOCK_CONSUMPTION_ID,
 } from "../../inventoryContracts";
 import inventoryEngine from "../../inventoryEngine";
+import { consumptionQuantity } from "../../inventoryOperations";
 import stockConsumptionChild, {
-  consumptionQuantity,
   consumptionUnitCost,
   planOrderConsumption,
 } from "./stockConsumptionChild";

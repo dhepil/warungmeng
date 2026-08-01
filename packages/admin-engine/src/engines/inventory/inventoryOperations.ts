@@ -3,7 +3,12 @@
 // Shared Inventory behavior used by sibling children. Operations may import the
 // area's contracts; contracts never import operations.
 
-import type { InventoryIngredient, InventoryStockBalance, Money } from "@warungmeng/domain";
+import type {
+  InventoryIngredient,
+  InventoryStockBalance,
+  Money,
+  RecipeComponent,
+} from "@warungmeng/domain";
 import {
   applyStockDelta,
   areInventoryUnitsCompatible,
@@ -23,6 +28,18 @@ import {
   MOVEMENT_QUANTITY_MINIMUM,
   UNIT_COST_FLOOR,
 } from "./inventoryContracts";
+
+/**
+ * SOURCE's recipe-consumption arithmetic, shared by the writer and DS-C's
+ * historical reconstruction.
+ *
+ * Waste is applied per ordered menu unit, before conversion into a common stock
+ * unit. Keeping this in the area's operations prevents the capture and read
+ * paths from drifting into two definitions of the same recipe proportion.
+ */
+export function consumptionQuantity(component: RecipeComponent, orderedQuantity: number): number {
+  return component.quantity * orderedQuantity * (1 + component.wastePercentage / 100);
+}
 
 /**
  * Rounds an entered value to the area's decimal precision.
