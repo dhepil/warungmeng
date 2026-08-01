@@ -251,6 +251,7 @@ const NO_STORE = "no-catalog-store";
 const STORE_FAILED = "catalog-store-failed";
 const NOT_FOUND = "not-found";
 const CATEGORY_IN_USE = "category-in-use";
+const CATEGORY_NOT_FOUND = "category-not-found";
 
 function noStore<TValue>(operation: string): OperationResult<TValue> {
   return operationFailure("unsatisfied-dependency", [
@@ -341,13 +342,30 @@ function menuEditorOverStore(store: MenuCatalogPort): MenuEditor {
      */
     async saveMenu({ menuId, values }: SaveMenuInput): Promise<OperationResult<MenuItem>> {
       try {
-        const baseline = menuId === null ? null : await store.getMenuById(menuId);
+        const [baseline, menus, categories] = await Promise.all([
+          menuId === null ? Promise.resolve(null) : store.getMenuById(menuId),
+          store.listMenus(),
+          store.listCategories(),
+        ]);
         if (menuId !== null && baseline === null) {
           return notFound("saveMenu", menuId);
         }
 
-        const sortOrder = baseline?.sortOrder ?? nextSortOrder(await store.listMenus());
-        const issues = validateMenuDraft(values, baseline, sortOrder);
+        const sortOrder = baseline?.sortOrder ?? nextSortOrder(menus);
+        const issues = [...validateMenuDraft(values, baseline, sortOrder)];
+        if (
+          values.categoryId.trim().length > 0 &&
+          !categories.some((category) => category.id === values.categoryId)
+        ) {
+          issues.push(
+            operationIssue(
+              CATEGORY_NOT_FOUND,
+              `Category ${values.categoryId} does not exist, so the menu cannot be saved.`,
+              "categoryId",
+              { categoryId: values.categoryId },
+            ),
+          );
+        }
         if (issues.length > 0) {
           return operationFailure("invalid-input", issues);
         }
@@ -365,13 +383,13 @@ function menuEditorOverStore(store: MenuCatalogPort): MenuEditor {
     },
 
     /**
-     * Deletes without a guard, as SOURCE did.
+     * Deletes the row that owns this menu's group links.
      *
-     * A menu can be deleted while variant groups still reference it and while
-     * its own `variantGroupIds` still point at groups; SOURCE cleaned up
-     * neither direction, and POS is the only place a dangling link is noticed,
-     * at read time. Adding referential cleanup here would be a new rule rather
-     * than a ported one, so it stays out and stays written down.
+     * The target stores the relationship only on `MenuItem.variantGroupIds`;
+     * a group has no reverse list of menu ids. Deleting the menu row therefore
+     * removes this direction of the relationship without a sibling call or a
+     * second write. Group deletion handles the opposite direction in its own
+     * child by stripping the group id from every surviving menu.
      */
     async deleteMenu(menuId: string): Promise<OperationResult<string>> {
       try {

@@ -496,7 +496,10 @@ describe("menu-editor as a logic child", () => {
   });
 
   it("creates a menu and appends it at the next sort order", async () => {
-    const store = mutableStore({ menus: [menu({ id: "m1", name: "First", sortOrder: 4 })] });
+    const store = mutableStore({
+      menus: [menu({ id: "m1", name: "First", sortOrder: 4 })],
+      categories: [category({ id: "cat-food", name: "Food" })],
+    });
     const { editor, dispose } = runtimeWith(store.port);
 
     const saved = await editor?.saveMenu({ menuId: null, values: values({ name: "Second" }) });
@@ -510,7 +513,10 @@ describe("menu-editor as a logic child", () => {
   });
 
   it("updates an existing menu in place, keeping its sort order", async () => {
-    const store = mutableStore({ menus: [menu({ id: "m1", name: "Old", sortOrder: 2 })] });
+    const store = mutableStore({
+      menus: [menu({ id: "m1", name: "Old", sortOrder: 2 })],
+      categories: [category({ id: "cat-food", name: "Food" })],
+    });
     const { editor, dispose } = runtimeWith(store.port);
 
     const saved = await editor?.saveMenu({ menuId: "m1", values: values({ name: "New" }) });
@@ -535,10 +541,34 @@ describe("menu-editor as a logic child", () => {
     dispose();
   });
 
+  it("refuses to save a menu whose category id is orphaned", async () => {
+    const store = mutableStore({
+      menus: [menu({ id: "m1", name: "Old", categoryId: "cat-deleted" })],
+      categories: [category({ id: "cat-food", name: "Food" })],
+    });
+    const { editor, dispose } = runtimeWith(store.port);
+
+    const saved = await editor?.saveMenu({
+      menuId: "m1",
+      values: values({ name: "New", categoryId: "cat-deleted" }),
+    });
+
+    expect(saved?.status === "failure" && saved.reason).toBe("invalid-input");
+    expect(saved?.status === "failure" && saved.issues).toContainEqual(
+      expect.objectContaining({ code: "category-not-found", subject: "categoryId" }),
+    );
+    expect(store.menus[0]?.name).toBe("Old");
+
+    dispose();
+  });
+
   it("re-reads the baseline at save time rather than trusting a stale one", async () => {
     // SOURCE held the baseline in screen state from mount, so a slug changed
     // elsewhere could be overwritten on save.
-    const store = mutableStore({ menus: [menu({ id: "m1", name: "A", slug: "a" })] });
+    const store = mutableStore({
+      menus: [menu({ id: "m1", name: "A", slug: "a" })],
+      categories: [category({ id: "cat-food", name: "Food" })],
+    });
     const { editor, dispose } = runtimeWith(store.port);
 
     await editor?.loadMenuDraft("m1");
@@ -557,12 +587,22 @@ describe("menu-editor as a logic child", () => {
     dispose();
   });
 
-  it("deletes a menu and reports not-found for a second attempt", async () => {
-    const store = mutableStore({ menus: [menu({ id: "m1", name: "A" })] });
+  it("deletes a menu so its group connection disappears with the owning row", async () => {
+    const store = mutableStore({
+      menus: [
+        menu({ id: "m1", name: "A", variantGroupIds: ["g1"] }),
+        menu({ id: "m2", name: "B", variantGroupIds: ["g1"] }),
+      ],
+      variantGroups: [group({ id: "g1", name: "Spice" })],
+    });
     const { editor, dispose } = runtimeWith(store.port);
 
     expect((await editor?.deleteMenu("m1"))?.status).toBe("success");
-    expect(store.menus).toHaveLength(0);
+    expect(store.menus.map((entry) => entry.id)).toEqual(["m2"]);
+    expect(
+      store.menus.filter((entry) => entry.variantGroupIds.includes("g1")).map((entry) => entry.id),
+    ).toEqual(["m2"]);
+    expect(store.variantGroups.map((entry) => entry.id)).toEqual(["g1"]);
     const again = await editor?.deleteMenu("m1");
     expect(again?.status === "failure" && again.reason).toBe("not-found");
 
@@ -656,7 +696,9 @@ describe("menu-editor as a logic child", () => {
   });
 
   it("turns a thrown store error into a normalized failure carrying its message", async () => {
-    const store = mutableStore({});
+    const store = mutableStore({
+      categories: [category({ id: "cat-food", name: "Food" })],
+    });
     const { editor, dispose } = runtimeWith({
       ...store.port,
       createMenu: async () => {

@@ -374,6 +374,7 @@ const NO_STORE = "no-catalog-store";
 const STORE_FAILED = "catalog-store-failed";
 const NOT_FOUND = "not-found";
 const CONNECTION_FAILED = "connection-failed";
+const CONNECTION_CLEANUP_FAILED = "connection-cleanup-failed";
 
 function noStore<TValue>(operation: string): OperationResult<TValue> {
   return operationFailure("unsatisfied-dependency", [
@@ -406,6 +407,32 @@ function nextSortOrder(entities: readonly { readonly sortOrder: number }[]): num
 }
 
 function variantManagementOverStore(store: MenuCatalogPort): VariantManagement {
+  /**
+   * Attempts every menu connection change and reports the rows that did not
+   * land. These writes are deliberately non-atomic, so one failed row must not
+   * prevent later rows from being repaired.
+   */
+  async function applyConnectionChanges(
+    changes: readonly { readonly menuId: string; readonly variantGroupIds: readonly string[] }[],
+  ): Promise<readonly string[]> {
+    const failedMenuIds: string[] = [];
+
+    for (const change of changes) {
+      try {
+        const updated = await store.updateMenu(change.menuId, {
+          variantGroupIds: change.variantGroupIds,
+        });
+        if (updated === null) {
+          failedMenuIds.push(change.menuId);
+        }
+      } catch {
+        failedMenuIds.push(change.menuId);
+      }
+    }
+
+    return failedMenuIds;
+  }
+
   /**
    * Applies a transform to a group's options and writes the result.
    *
@@ -527,20 +554,7 @@ function variantManagementOverStore(store: MenuCatalogPort): VariantManagement {
         // single missing menu cannot strand the rest.
         const menus = await store.listMenus();
         const changes = connectionChanges(menus, group.id, values.connectedMenuIds);
-        const failedMenuIds: string[] = [];
-
-        for (const change of changes) {
-          try {
-            const updated = await store.updateMenu(change.menuId, {
-              variantGroupIds: change.variantGroupIds,
-            });
-            if (updated === null) {
-              failedMenuIds.push(change.menuId);
-            }
-          } catch {
-            failedMenuIds.push(change.menuId);
-          }
-        }
+        const failedMenuIds = await applyConnectionChanges(changes);
 
         return operationDegraded(
           { group, failedMenuIds },
@@ -559,18 +573,41 @@ function variantManagementOverStore(store: MenuCatalogPort): VariantManagement {
     },
 
     /**
-     * Deletes the group without stripping its id from any menu, as SOURCE did.
+     * Deletes the group, then strips its id from every menu that referenced it.
      *
-     * Menus keep a dangling `variantGroupIds` entry, which POS notices at read
-     * time. Cleaning up here would be a new rule rather than a ported one, and
-     * it would also make this child the owner of a second write path over menus.
+     * The menu list is read before the delete so a list failure cannot hide a
+     * group that was already removed. Cleanup remains deliberately non-atomic:
+     * every menu is attempted, and a partial outcome is returned as degraded
+     * with the exact menu ids that could not be repaired.
      */
     async deleteVariantGroup(variantGroupId: string): Promise<OperationResult<string>> {
       try {
+        const existing = await store.getVariantGroupById(variantGroupId);
+        if (existing === null) {
+          return notFound("deleteVariantGroup", variantGroupId);
+        }
+
+        const menus = await store.listMenus();
         const deleted = await store.deleteVariantGroup(variantGroupId);
-        return deleted
-          ? operationSuccess(variantGroupId)
-          : notFound("deleteVariantGroup", variantGroupId);
+        if (!deleted) {
+          return notFound("deleteVariantGroup", variantGroupId);
+        }
+
+        const changes = connectionChanges(menus, variantGroupId, []);
+        const failedMenuIds = await applyConnectionChanges(changes);
+
+        return operationDegraded(
+          variantGroupId,
+          failedMenuIds.map((menuId) =>
+            operationIssue(
+              CONNECTION_CLEANUP_FAILED,
+              `Variant group ${variantGroupId} was deleted, but menu ${menuId} still ` +
+                "references it.",
+              menuId,
+              { menuId, variantGroupId },
+            ),
+          ),
+        );
       } catch (error) {
         return storeFailed("deleteVariantGroup", error);
       }

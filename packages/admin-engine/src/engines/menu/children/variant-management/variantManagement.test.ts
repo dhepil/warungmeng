@@ -757,17 +757,56 @@ describe("variant-management as a logic child", () => {
     dispose();
   });
 
-  it("deletes a group without stripping its id from menus, as SOURCE did", async () => {
+  it("deletes a group and strips its id from every surviving menu", async () => {
     const store = mutableStore({
       variantGroups: [group({ id: "g1", name: "Spice" })],
-      menus: [menu({ id: "m1", name: "A", variantGroupIds: ["g1"] })],
+      menus: [
+        menu({ id: "m1", name: "A", variantGroupIds: ["g1", "g2"] }),
+        menu({ id: "m2", name: "B", variantGroupIds: ["g1"] }),
+        menu({ id: "m3", name: "C", variantGroupIds: ["g2"] }),
+      ],
     });
     const { variants, dispose } = runtimeWith(store.port);
 
     expect((await variants?.deleteVariantGroup("g1"))?.status).toBe("success");
     expect(store.variantGroups).toHaveLength(0);
-    // Documented, not endorsed: POS is where the dangling link is noticed.
-    expect(store.menus[0]?.variantGroupIds).toEqual(["g1"]);
+    expect(store.menus.map((entry) => entry.variantGroupIds)).toEqual([["g2"], [], ["g2"]]);
+
+    dispose();
+  });
+
+  it("tries every group-reference cleanup and degrades with the failed menu ids", async () => {
+    const store = mutableStore({
+      variantGroups: [group({ id: "g1", name: "Spice" })],
+      menus: [
+        menu({ id: "m1", name: "A", variantGroupIds: ["g1"] }),
+        menu({ id: "m2", name: "B", variantGroupIds: ["g1"] }),
+        menu({ id: "m3", name: "C", variantGroupIds: ["g1", "g2"] }),
+      ],
+    });
+    const attemptedMenuIds: string[] = [];
+    const { variants, dispose } = runtimeWith({
+      ...store.port,
+      updateMenu: async (id, changes) => {
+        attemptedMenuIds.push(id);
+        if (id === "m1") throw new Error("row locked");
+        if (id === "m2") return null;
+        return store.port.updateMenu(id, changes);
+      },
+    });
+
+    const deleted = await variants?.deleteVariantGroup("g1");
+
+    expect(deleted?.status).toBe("degraded");
+    if (deleted?.status !== "degraded") return;
+    expect(deleted.value).toBe("g1");
+    expect(attemptedMenuIds).toEqual(["m1", "m2", "m3"]);
+    expect(deleted.issues.map((issue) => issue.subject)).toEqual(["m1", "m2"]);
+    expect(deleted.issues.every((issue) => issue.code === "connection-cleanup-failed")).toBe(true);
+    expect(store.variantGroups).toHaveLength(0);
+    expect(store.menus.find((entry) => entry.id === "m1")?.variantGroupIds).toEqual(["g1"]);
+    expect(store.menus.find((entry) => entry.id === "m2")?.variantGroupIds).toEqual(["g1"]);
+    expect(store.menus.find((entry) => entry.id === "m3")?.variantGroupIds).toEqual(["g2"]);
 
     dispose();
   });
