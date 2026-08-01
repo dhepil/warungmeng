@@ -240,9 +240,12 @@ packages/
 │  │     │     ├─ stock-reversal/
 │  │     │     │  ├─ stockReversalChild.ts
 │  │     │     │  └─ stockReversal.test.ts
-│  │     │     └─ hpp-calculation/
-│  │     │        ├─ hppCalculationChild.ts
-│  │     │        └─ hppCalculation.test.ts
+│  │     │     ├─ hpp-calculation/
+│  │     │     │  ├─ hppCalculationChild.ts
+│  │     │     │  └─ hppCalculation.test.ts
+│  │     │     └─ historical-item-profit/
+│  │     │        ├─ historicalItemProfitChild.ts
+│  │     │        └─ historicalItemProfit.test.ts
 │  │     │
 │  │     ├─ pos/
 │  │     │  ├─ posEngine.ts
@@ -522,6 +525,9 @@ admin.dashboard.reports
 admin.inventory.hpp-calculation
 └─ requires admin.menu.catalog-read
 
+admin.inventory.historical-item-profit
+└─ requires admin.orders.read
+
 admin.orders.order-cancellation
 ├─ requires admin.orders.read
 ├─ requires admin.inventory.stock-reversal
@@ -540,6 +546,12 @@ admin.pos.checkout
 ├─ requires admin.finance.transaction-recording
 └─ requires admin.atomic-operation
 ```
+
+`admin.inventory.historical-item-profit` publishes a recipe-proportional
+**reconstruction**, not recorded order-item attribution. It is exact only while
+recipes remain read-only; the contract must be revisited when D16's recipe editor
+ships. Consumption movements whose sale-time `unitCost` is absent are unknown and
+degraded, never zero-cost.
 
 ### Storefront
 
