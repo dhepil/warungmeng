@@ -120,8 +120,10 @@ capabilities), plus the S13 phase gate, which asserts both verbatim and turns re
 a 24th child. So the authorizing act is an edit to the DESIGN DOCUMENT, belonging in
 the slice that builds the child as its own clearly-labelled first commit.
 
-**D10 is the only remaining item that genuinely needs a `plan.json` line**
-(`*Operations.ts` matches no existing glob).
+**D10 was the last item that genuinely needed a `plan.json` line, and it is now
+resolved** — `*Operations.ts` and `*Operations.test.ts` were added to the P3 allow
+list in commit `53fbba3` (plan-only, owner-approved), and the four shared rules moved
+in `fff46ad`. **No open item now requires a `plan.json` structure edit.**
 
 ### Ordering
 
