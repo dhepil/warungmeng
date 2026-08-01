@@ -67,6 +67,54 @@ Depends on domain + module-system. MUST NOT import storefront-engine or React.
 - [x] S13 `adminEngineGraph.test.ts` — phase gate (real on-disk discovery; the
       completeness proof the `engines/*` globs cannot give)
 
+## PD — Debt settlement  `[ ]`  ← PROPOSED, awaiting owner go
+On 2026-08-01 the owner decided every open item in `tech-debt.md` in one sitting
+(see "Owner decisions" at the top of that file). Two of those decisions — money
+becomes whole rupiah (D11/D19), and per-item historical profit is needed (D20) —
+change `packages/domain`, a CLOSED phase. Three more items (D8, D22, and D19's
+rounding inconsistency) were each parked with the words "revisit whenever the domain
+is next open", so they come along rather than being paid for twice.
+
+**Why this goes BEFORE P4 and not after.** The storefront shows prices and totals.
+Building it against the old money rules and then changing those rules underneath it
+means porting the same screens twice. Nothing here depends on P4; P4 depends on this.
+
+**Each block needs the owner to flip `activePhase` first** (the one allowed
+`plan.json` edit) — domain slices under `P1-domain`, admin slices under
+`P3-admin-engine` — then back to `P4-storefront-engine` when PD is done. No phase is
+added to `plan.json`; PD is an ordering concept and lives only in this file.
+
+Domain block (reopen `P1-domain`):
+- [ ] DS1 whole-rupiah money rule in one place, applied to average unit cost, HPP
+      and the recommended price (D11 + D19). **Expect many of the 516 tests to
+      change their expected figures — that is the point of the slice, and also
+      exactly where a mistake can hide. List every changed expectation in the
+      commit, and mutation-test the rounding rule itself.**
+- [ ] DS2 dedicated `reversal` movement type (D22) + the optional tidy pass (D8),
+      both of which only ever needed the domain to be open
+- [ ] DS3 reporting attribution model — let a consumption row carry which menu item
+      it was sold for, and teach the aggregators to add up stored costs (D20, domain
+      half)
+
+Admin block (reopen `P3-admin-engine`):
+- [ ] DS4 shared rules get a real home: `engines/*/*Operations.ts` (D10). **This is
+      the only item on the whole list that needs a `plan.json` line added.** Do it
+      first, because DS5 touches the same inventory files.
+- [ ] DS5 record menu attribution when consumption is written (D20, engine half)
+- [ ] DS6 per-item historical profit in dashboard reports — completes D20
+- [ ] DS7 referential integrity: each child cleans up the links it leaves behind on
+      delete, and saving a menu checks the category exists (D1 + D2)
+- [ ] DS8 `order-progression` child (D28). **First commit of this slice amends
+      `new-target/LOGIC-TARGET-FILE-TREE.md` §4 and §8** — that is the owner's
+      authorizing act and must stand alone, clearly labelled, before any code. Reuse
+      the domain transition machine, keep the store's authoritative
+      `updated | not-found | invalid-transition` outcome, and never create a general
+      status-setter door (S8 deleted exactly that from SOURCE).
+
+NOT in this block: D16 recipe-editor is **authorized** but the owner chose to build
+it with the screen that needs it, so it stays `scheduled` until P5. D27 is not a
+decision — it resolves itself when P4 storefront checkout lands.
+
 ## P4 — packages/storefront-engine (storefront headless logic)  `[ ]`
 Depends on domain + module-system. MUST NOT import admin-engine or React.
 - [ ] S1 contracts + snapshot

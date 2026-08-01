@@ -18,7 +18,56 @@ Status: `open` — live, undecided · `accepted` — deliberate, not planned to 
 
 ---
 
-## D1 — Deleting a menu or variant group leaves stale links · `open`
+## Owner decisions — 2026-08-01 ("settle debt once for all")
+
+The owner reviewed every open item in one sitting and decided all of them. **These
+are settled. Do not re-litigate them; do not ask again.** Each affected entry below
+carries a status line pointing here. Nothing has been BUILT yet — these decisions
+schedule work, they do not perform it.
+
+| # | Decision | Result |
+|---|---|---|
+| D1 | Deleting must clean up the links it leaves behind | `scheduled` |
+| D2 | Saving a menu must check the category really exists | `scheduled` |
+| D8 | Domain tidy pass — fold into the domain reopening below | `scheduled` |
+| D10 | Shared rules get a real home (`*Operations.ts`) | `scheduled` |
+| D11 | **Money becomes whole rupiah everywhere** | `scheduled` |
+| D12 | "piece" and "portion" genuinely mean the same thing | `accepted`, closed |
+| D16 | Recipe editing is authorized; build it with the screen | `scheduled` |
+| D19 | Folded into D11 — one rounding rule, applied once | `scheduled` |
+| D20 | **Per-item historical profit IS needed** | `scheduled` |
+| D22 | Dedicated reversal movement type — fold into domain reopening | `scheduled` |
+| D25 | Warung Meng is **one outlet**. Closed as deliberate | `accepted`, closed |
+| D27 | Not a decision — resolves when P4 storefront checkout lands | `open` |
+| D28 | **Forward order progression is authorized** | `scheduled` |
+
+**The consequence that matters most.** Two decisions (D11 whole rupiah, D20 per-item
+historical profit) both change `packages/domain`, which is a CLOSED phase, and D20
+additionally changes how inventory records movements and how reporting adds them up.
+Three more items (D8, D22, and D19's rounding consistency) were each parked with the
+words "revisit whenever the domain is next open" — so that moment is now, and they
+come along rather than being done twice.
+
+**Therefore the domain work must land BEFORE P4-storefront-engine, not after.** The
+storefront displays prices and totals. Building it against the old money rules and
+then changing those rules underneath it means porting the same screens twice. This
+is a sequencing question the owner must answer, because it means P4 pauses before it
+starts — it is recorded in `roadmap.md`, not decided here.
+
+**Two new children are authorized** (`order-progression`, `recipe-editor`). Note for
+whoever builds them: the earlier text in D16/D28 saying they need a line added to
+`plan.json` is WRONG and was corrected on 2026-08-01. `plan.json` already permits any
+file at `engines/<area>/children/<name>/<name>Child.ts` through an existing pattern.
+What actually withholds permission is `new-target/LOGIC-TARGET-FILE-TREE.md`, whose
+§4 tree names the children and whose §8 graph grants the capabilities — plus the S13
+phase gate, which asserts both verbatim and will turn red on a 24th child. So the
+authorizing edit is to the DESIGN DOCUMENT, and it belongs in the same slice that
+builds the child, as its own clearly-labelled first commit. `plan.json` needs no
+change for either. D10 is the only item here that genuinely needs a `plan.json` line.
+
+---
+
+## D1 — Deleting a menu or variant group leaves stale links · `scheduled`
 
 **Found:** P3 S3 (menu area). **Owner asked to decide.**
 
@@ -45,7 +94,7 @@ that caused it.
 
 ---
 
-## D2 — Nothing checks that a `categoryId` points at a real category · `open`
+## D2 — Nothing checks that a `categoryId` points at a real category · `scheduled`
 
 **Found:** P3 S3, reading the domain validator.
 
@@ -159,7 +208,7 @@ worse until option ordering has one owner.
 
 ---
 
-## D8 — P1 domain tidy pass never ran · `open`
+## D8 — P1 domain tidy pass never ran · `scheduled`
 
 **Found:** P1 S7, deferred at the time because no tests existed yet.
 
@@ -172,7 +221,7 @@ had something more valuable to do. Skippable indefinitely.
 
 ---
 
-## D10 — The shared write primitive lives in a contracts file · `open`
+## D10 — The shared write primitive lives in a contracts file · `scheduled`
 
 **Found:** P3 S4 (inventory part one). **Owner decision, deferred to the end of
 P3 by the owner on 2026-07-31.** Do not ask again before then; do not act on it
@@ -256,7 +305,7 @@ package and inherits none of this.
 
 ---
 
-## D11 — Average unit cost is unrounded float, and feeds prices · `open`
+## D11 — Average unit cost is unrounded float, and feeds prices · `scheduled`
 
 **Found:** P3 S4, reading SOURCE's cost math.
 
@@ -288,7 +337,7 @@ D12.
 
 ---
 
-## D12 — "piece" and "portion" are interchangeable · `accepted`
+## D12 — "piece" and "portion" are interchangeable · `accepted` (closed 2026-08-01)
 
 **Found:** P3 S4, reading the domain's unit table.
 
@@ -339,7 +388,7 @@ forbidding them.
 
 ---
 
-## D16 — No recipe WRITE path, and no child owns recipe editing · `open`
+## D16 — No recipe WRITE path, and no child owns recipe editing · `scheduled`
 
 **Found:** P3 S4 as "recipes are not on the port at all". **Half resolved in S5**:
 `listRecipes` was added, because `hpp-calculation` genuinely needed it. This entry
@@ -381,7 +430,7 @@ still be seeded, and HPP costs whatever the seed says.
 
 ---
 
-## D19 — HPP rounds three times over the same figures · `accepted`
+## D19 — HPP rounds three times over the same figures · `scheduled`
 
 **Found:** P3 S5, reading the domain's costing math.
 
@@ -404,7 +453,7 @@ the selling price yields a negative percentage with no label saying "loss-making
 
 ---
 
-## D20 — Historical dashboard COGS needs movement-to-menu attribution · `open, narrowed in P3 S11`
+## D20 — Historical dashboard COGS needs movement-to-menu attribution · `scheduled`
 
 **Found:** P3 S5, from the scout's sweep for HPP consumers. **Slice 11.**
 
@@ -455,7 +504,7 @@ not a hole at reversal time.
 
 ---
 
-## D22 — A seeded `adjustment-in` can still suppress a real reversal · `accepted`
+## D22 — A seeded `adjustment-in` can still suppress a real reversal · `scheduled`
 
 **Found:** P3 S5, while building `stock-reversal`.
 
@@ -496,7 +545,7 @@ concrete workflow rather than a union member.
 
 ---
 
-## D25 — The finance ledger defaults to one hardcoded outlet · `open`
+## D25 — The finance ledger defaults to one hardcoded outlet · `accepted` (closed 2026-08-01)
 
 **Found:** P3 S6.
 
@@ -569,7 +618,7 @@ a React ref remains only a responsiveness guard, never the durability mechanism.
 
 ---
 
-## D28 — Forward order status progression has no target logic child · `open`
+## D28 — Forward order status progression has no target logic child · `scheduled`
 
 **Found:** P3 S7, while mapping SOURCE Order detail against the target Orders tree.
 
