@@ -29,8 +29,8 @@ commits scheduled work only; later PD commits perform it.
 
 | # | Decision | Result |
 |---|---|---|
-| D1 | Deleting must clean up the links it leaves behind | `scheduled` |
-| D2 | Saving a menu must check the category really exists | `scheduled` |
+| D1 | Deleting must clean up the links it leaves behind | `resolved` — f234990 |
+| D2 | Saving a menu must check the category really exists | `resolved` — f234990 |
 | D8 | Domain tidy pass — lost its carrier slice, see below | `accepted` |
 | D10 | Shared rules get a real home (`*Operations.ts`) | `resolved` — commit `refactor(admin-engine): DS-A move shared rules to operations` |
 | D11 | **Money stays as it is; format at display instead** | `accepted` |
@@ -135,52 +135,6 @@ money decision was revised and D20 became additive. Nothing in this list now blo
 P4. The owner's chosen order is still debt-first, because the items are small and the
 admin engine is fresh in the plan-of-record, whereas P4 is a whole phase that would
 push that context far away. Easily reversed if the storefront becomes urgent.
-
----
-
-## D1 — Deleting a menu or variant group leaves stale links · `scheduled`
-
-**Found:** P3 S3 (menu area). **Owner asked to decide.**
-
-Deleting a variant group does not remove its id from any menu's `variantGroupIds`,
-and deleting a menu does not touch any group. The stale link survives. Nothing in
-the admin engine notices; the till (POS) is the only reader that does, and only when
-it loads a cart, where it raises a `missing-group` issue.
-
-**Why it was left:** SOURCE behaved exactly this way in both directions. Cleaning up
-would be a new rule rather than a ported one, and it would make
-`variant-management` the second writer over menu rows for a reason unrelated to its
-own workflow.
-
-**What it costs to fix:** one guarded pass at delete time in each direction. The
-awkward part is not the loop, it is ownership — menu deletion lives in
-`menu-editor`, group deletion in `variant-management`, and neither may depend on the
-other (LOGIC §8: no menu child requires anything). Likely shape: each child cleans
-up the links it is responsible for, through the store port it already holds.
-
-**What it costs to leave:** every reader of `variantGroupIds` must tolerate ids that
-resolve to nothing, forever. POS already does. Anything built later that assumes a
-listed group exists will be wrong, and the failure will surface far from the delete
-that caused it.
-
----
-
-## D2 — Nothing checks that a `categoryId` points at a real category · `scheduled`
-
-**Found:** P3 S3, reading the domain validator.
-
-`validateMenuItem` only requires `categoryId` to be non-blank. A menu can carry a
-category id that no category has. Same shape of problem as D1 and worth deciding
-together with it.
-
-**Why it was left:** SOURCE never checked it either — the editor happened to offer
-only real categories, so the invalid case was unreachable through the one screen.
-That is not a rule, it is a screen that never allowed the mistake.
-
-**What it costs to fix:** one existence check in `menu-editor.saveMenu`, which
-already reads categories for the draft. Cheap. The reason it is not done is that it
-changes what a valid write is, and the same question applies to `variantGroupIds`
-(D1), so both should be answered at once rather than one per slice.
 
 ---
 

@@ -67,7 +67,7 @@ Depends on domain + module-system. MUST NOT import storefront-engine or React.
 - [x] S13 `adminEngineGraph.test.ts` — phase gate (real on-disk discovery; the
       completeness proof the `engines/*` globs cannot give)
 
-## PD — Debt settlement  `[ ]`  ← awaiting owner go, slice by slice
+## PD — Debt settlement  `[x]`  — complete
 The owner decided every open item in `tech-debt.md` on 2026-08-01, then REVISED two
 of those decisions the same day once the cost was clear. Read the "Owner decisions"
 section at the top of `tech-debt.md` before starting any slice here — it explains the
@@ -77,17 +77,18 @@ revision, which matters more than the original decision.
 cash was already whole rupiah, and the fractions live only in per-unit cost rates
 where they are required. It became a display formatter at P5 instead. And per-item
 historical profit needs no domain rewrite: the data is already recorded, so it is a
-new read child. **Neither remaining item reopens `packages/domain`, so nothing here
-blocks P4 anymore.** Debt-first is the owner's preference, not a dependency.
+new read child. **The final two implementation slices did not reopen
+`packages/domain`, so nothing here blocked P4.** Debt-first was the owner's
+preference, not a dependency.
 
-Every slice below is ADDITIVE or local. No closed phase is reopened.
+Every slice below was ADDITIVE or local. No closed phase was reopened.
 Slices are lettered (DS-A…) not numbered, because the original DS1-DS8 numbering was
 published in a superseded plan and reusing those numbers would silently conflate the
 two. Order within the block is a suggestion; only DS-A→DS-C is a hard dependency.
 
-Set `activePhase` to `P3-admin-engine` for this block (the one allowed plan edit),
-and back to `P4-storefront-engine` when it is done. **PD is an ordering concept in
-this file only — it is NOT a phase in `plan.json`.**
+`activePhase` was set to `P3-admin-engine` for this block (the one allowed plan
+edit), then returned to `P4-storefront-engine` when it finished. **PD is an ordering
+concept in this file only — it is NOT a phase in `plan.json`.**
 
 - [x] DS-A shared rules get a real home: `engines/*/*Operations.ts` (D10).
       **The only item in the whole block needing a `plan.json` line added** — owner
@@ -110,7 +111,7 @@ this file only — it is NOT a phase in `plan.json`.**
       **unknown**, never zero — zero reads as pure profit, the one wrong answer that
       looks plausible. Dashboard joins this against revenue it already reads and
       must NOT gain repository access (that is D15, resolved at S11).
-- [ ] DS-D referential integrity (D1 + D2) — each child cleans up the links it
+- [x] DS-D referential integrity (D1 + D2) — each child cleans up the links it
       leaves behind on delete, and saving a menu checks its category exists. Local
       to the menu area, no new files. Watch for existing data with broken links:
       the category check can make previously-saveable rows start failing.
@@ -174,6 +175,7 @@ Gate to done: apps build, all boundary + structure + tests green end to end.
 
 ## Progress notes
 (latest at top — agent appends one line when a slice or phase changes state)
+- PD DS-D done — D1 and D2 resolved locally in product commit f234990, with no new file, contract, capability, requirement edge, sibling import, domain edit, `new-target` edit, or S13 edit. The target stores group attachment only in each menu's `variantGroupIds`: deleting a menu removes that menu and therefore its outgoing group links while preserving reusable groups; deleting a group first reads the menus, deletes the group, then attempts to strip its id from every affected menu even after an earlier update returns null or throws. Partial cleanup returns the deleted group id as usable `degraded` data plus one `connection-cleanup-failed` issue per failed menu id. `saveMenu` still re-reads its baseline at save time and now also checks the current category list; a missing nonblank id fails before write as `invalid-input` carrying `category-not-found`. Owner-visible compatibility warning: a legacy menu whose category was already deleted could previously be re-saved, but now refuses save until its category is repaired. Both capabilities remain reachable only through their existing probe-tested children. Two permanent tests were added (545 total); the menu/variant focus is 97/97 and untouched S13 is 21/21. Three mutations each made exactly one selected test red and were restored: category existence removed, group cleanup removed, and cleanup made fail-fast. Full check green: structure 91 files, boundaries, typecheck, 28 test files and 545 tests. The PD block is closed, `activePhase` is back at P4, and P4 has not started.
 - PD DS-C done — D20 resolved in two implementation checkpoints plus this bookkeeping: owner authorization first and alone in ca27c32 (`new-target` §4 adds `historical-item-profit`; §8 grants exact capability `admin.inventory.historical-item-profit` requiring `admin.orders.read`), then product in f147482. The Inventory child joins sale-time movement cost snapshots, Orders items/revenue, and current recipes without giving Dashboard repository access or reopening `packages/domain`. It independently refilters outlet, Jakarta dates, consumption type/reference, and optional menu id; deterministic ordering breaks equal movement/order timestamps by id and duplicate menu names by menu id. Shared-ingredient costs are divided by recipe consumption proportion, packaging/extras retain full precision, and the aggregate carries explicit `recipe-proportional-reconstruction` plus `current-recipe-assumed-unchanged` metadata. A recipe/recorded-quantity mismatch degrades and D16 now records the required versioning revisit. Most importantly, any included pre-S11 `unitCost: null` makes the affected menu's cost/profit `unknown` with null amounts—never zero and never a misleading known partial subtotal. Movements/recipes may fail independently and degrade while Orders remains usable; all-source failure is failure, and Orders failure never invents an empty result. Missing Inventory port keeps the child active/published with one diagnostic and normalized call failures. Capture and reconstruction now share `consumptionQuantity` through `inventoryOperations.ts`. Fifteen permanent tests reach the capability through a probe; S13 proves 25 children, seven requirement-bearing children, and the exact literal id/read edge. Three mutations each failed exactly one focused test and were restored to SHA-256 C102E6EC5E6EB062807A399A6F48FEC524BAAFF66D152B1B40025649FBE9321E: null→zero, proportional→equal split, and removal of the duplicate-name id tie-break. Full check green: structure 91 files, boundaries, typecheck, 28 test files and 543 tests. Stopped before DS-D.
 - PD DS-B done — D28 resolved in two implementation checkpoints plus this bookkeeping: owner authorization first and alone in 3b12f3b (`new-target` §4 adds the two planned files; §8 adds exact capability `admin.orders.order-progression` requiring `admin.orders.read`), then product in 1493d9f. The new child restores SOURCE's `new → accepted → preparing → ready → completed` workflow through one narrow `progressOrder` port whose target type contains only `accepted | preparing | ready | completed`; neither `new` nor `cancelled` can be requested structurally, and an explicit runtime guard rejects `cancelled` before the port because the closed domain machine itself permits cancellation/refund. There is no general status setter and no pre-read: the store remains the sole authoritative judge and returns `updated | not-found | invalid-transition`, while the injected adapter/store owns the domain transition, clock, event id, and commit. The read requirement is a liveness boundary—progression is excluded when Orders read is down—not a decorative call, confirming D29's definition of `requires`. A missing store keeps the child active/published with one diagnostic and normalized call failures. Tests reach the capability only through a probe child; the S13 literal gate now finds 24 children, maps the exact same capability id, and enforces the new read edge. Three mutations each failed exactly one focused test and were restored to the same SHA-256: allowing `cancelled` reached the domain-backed store and wrongly returned success, treating invalid transition as success was caught, and leaking a store exception was caught. Full check green: structure 89 files, boundaries, typecheck, 27 test files and 528 tests. Stopped before DS-C.
 - PD DS-A done — D10 resolved. The owner-approved structural slot landed first and alone in 53fbba3: `activePhase` moved to P3 and both `engines/*/*Operations.ts` plus `engines/*/*Operations.test.ts` globs were added, with no other plan field changed. Commit `refactor(admin-engine): DS-A move shared rules to operations` then moves exactly four existing functions—Inventory's `roundEntered`, `recomputeAverageUnitCost`, and `planStockMovement`, plus POS's `posCartFingerprint`—with their comments and bodies byte-identical into `inventoryOperations.ts` and `posOperations.ts`; all listed callers now import the area operation rather than a contracts file. No test or expectation changed, no child was added, and the S13 graph gate still proves all 23 children. Every area contracts file now exports zero functions, Operations imports Contracts in one direction only, and the new files are accepted by the two owner-approved globs. D10's live entry was deleted per the register rule and its story moved to the porting log. Full check green: structure 87 files, boundaries, typecheck, 26 test files and exactly 516 tests. Stopped before DS-B.

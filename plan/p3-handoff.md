@@ -1021,3 +1021,44 @@ to be safe to publish, not what the child calls.**
 - **D20 is closed; DS-D is not started.** Its live register entry was deleted under
   the register's own rule, while the durable reasoning now lives here and in the
   porting log. Roadmap records DS-C complete and leaves DS-D unchecked.
+
+## Decisions locked during PD DS-D (menu referential integrity)
+
+- **D1 and D2 close locally, with no structural addition.** Product commit f234990
+  changes only the existing `menu-editor` and `variant-management` child/test pairs.
+  No new file, contract surface, capability, requirement edge, sibling import,
+  `new-target` entry, domain edit, or S13 expectation was needed.
+- **The relationship has one physical owner.** `MenuVariantGroup` carries no reverse
+  menu-id list; attachments exist only as `MenuItem.variantGroupIds`. Deleting a menu
+  therefore removes that direction with the owning row and leaves reusable groups
+  intact. The permanent menu-editor test observes the derived connected-menu view:
+  the deleted menu disappears while another menu attached to the same group remains.
+- **Group deletion repairs every surviving menu.** `variant-management` reads the
+  current group and menu rows before deleting the group, then derives the minimal
+  detach changes and applies all of them through its own injected catalog port. It
+  neither imports nor requires `menu-editor`, preserving LOGIC §8's zero-requirement
+  menu children and the existing store-as-single-writer seam.
+- **Cleanup is deliberately non-atomic and its partial truth is visible.** A null or
+  thrown menu update records that menu id and does not stop later updates. Once the
+  group itself is deleted, partial cleanup returns its id as usable `degraded` data
+  with one `connection-cleanup-failed` issue per failed menu. A list failure happens
+  before delete and is an ordinary failure; no atomic-port guarantee was widened.
+- **A category must exist at the instant of save.** `saveMenu` re-reads baseline,
+  menus, and categories on every call. After the existing entity validation, a
+  nonblank `categoryId` absent from the current list adds the named
+  `category-not-found` issue and returns `invalid-input` before create/update. The
+  rule lives in logic, not form props.
+- **Compatibility warning for existing broken data.** A legacy menu whose category
+  was already deleted used to pass through save because only nonblankness was
+  checked. It now refuses save until its category link is repaired. Callers can
+  distinguish this intentional data-integrity refusal from a store outage by the
+  issue code and `categoryId` subject/details.
+- **Proof is focused and graph-neutral.** The two capability-probe suites pass 97
+  tests. Three restored mutations each failed exactly one selected test: remove the
+  category existence check (1 failed, 49 skipped), remove group cleanup (1 failed,
+  46 skipped), and stop after the first cleanup failure (1 failed, 46 skipped). The
+  untouched S13 gate remains exactly 21/21; full check is structure 91 files,
+  boundaries, typecheck, 28 test files, and 545 tests.
+- **The PD block is closed.** D1/D2 live entries were deleted under the register
+  rule, roadmap marks all four PD slices complete, and `activePhase` returned to
+  `P4-storefront-engine`. P4 is active in the plan of record but has not been started.
