@@ -36,7 +36,7 @@ Order is forced by the capability graph in `new-target/LOGIC-TARGET-FILE-TREE.md
 | 10 | pos — checkout + `submitPosCheckoutAtomically` | done — ffc2132, 68e1606, 1af89fd |
 | 11 | dashboard — overview, reports | done — 8a576d9, 97234d9 |
 | 12 | settings — theme-preference, business-hours | done — d2e5adf, de42ceb |
-| 13 | `adminEngineGraph.test.ts` — phase gate | |
+| 13 | `adminEngineGraph.test.ts` — phase gate | done — be938e9 |
 
 Menu is first because several areas require `admin.menu.catalog-read`. Dashboard
 is late because it reads orders + inventory + finance. Settings is independent.
@@ -810,3 +810,107 @@ the mechanics every area slice faces.
 - Behavior comes from SOURCE `apps/admin/src/features/menu/*` (46 files — use a
   scout agent to read it, port in the main thread). Structure comes from
   `plan.json`, never from SOURCE's layout.
+
+## Decisions locked during S13 (the phase gate) — P3 IS NOW CLOSED
+
+**This file is now history.** P3-admin-engine is `done` in `plan.json` and
+`activePhase` is `P4-storefront-engine`. Read this file only for the reasoning
+behind the admin-engine package; the P4 session should start a `p4-handoff.md` of
+its own rather than extending this one. The decisions below are the ones a P4
+session genuinely needs, because P4 has to build the same shape of gate.
+
+- **The gate is the only check that can see a mis-suffixed child, and it is now
+  permanent.** Nine prior slices proved this with a throwaway test and deleted it
+  each time. The measured blind spot (narrowed at S4 from S3's wider claim): a
+  rename whose new name matches NO allowed glob turns structure red, but a rename
+  to a DIFFERENT allowed glob (`fooChild.ts` → `foo.test.ts`) passes structure,
+  boundaries, typecheck AND every child test, while the child loads as nothing,
+  publishes nothing and reports nothing. Verified at S13 in its strongest form:
+  the sibling's import was fixed too so the mutation was completely silent, and
+  structure stayed green at 85 files while 497 other tests passed — including the
+  business-hours suite happily testing a child the runtime never loads. Only the
+  gate failed. **P4 must build the same file (`storefrontEngineGraph.test.ts` is
+  already `exact` in `plan.json`) for the same reason.**
+- **Assert ID SETS, never counts.** `toHaveLength(23)` is nearly useless here: a
+  renamed file keeps the count identical while loading as nothing, so the count
+  only moves on an outright deletion — which structure already catches. A set
+  comparison also fails with a readable diff naming the missing id, where a count
+  fails with "expected 23, got 22" and names no culprit.
+- **Write the expectations as LITERAL strings, not imports.** This is the decision
+  that makes the gate able to fail at all. Importing `ORDER_CANCEL_ID` from the
+  area contracts would make the test agree with the code BY CONSTRUCTION: renaming
+  the capability renames the expectation with it, and the test can never catch the
+  rename. Proven by mutation — changing that constant to the child id fails 4
+  tests. The gate transcribes LOGIC §4/§8 by hand on purpose, and that duplication
+  is the point rather than an untidiness to fix.
+- **A graph-EXCLUDED child reports `unmetRequirements: []`, and that is correct.**
+  The registry populates that field only for children it actually tried to
+  initialize; a child the dependency graph dropped never reaches
+  `initializeChild`, so its state falls back to `unavailable` with nothing recorded
+  against it. The reason lives in the graph's `missing-dependency` diagnostic
+  instead, which carries the child id and the unmet capability in `details`. The
+  gate asserts it there and documents why an empty array is not "no reason known".
+  This was a wrong assumption in my first draft, caught by running the test rather
+  than by reasoning — and it was corrected in the assertion, not asserted away.
+- **`Diagnostic["details"]` values are `string | number | boolean | null`, not
+  strings.** Tests pass and typecheck fails, which is the S8/S10 lesson again:
+  vitest transpiles without checking types, so `npm run check` catches fixture and
+  assertion defects the suite cannot see. Always run the full check, never just
+  vitest.
+- **Ports in the gate are stubs that THROW.** The gate proves composition, not
+  behavior — each area's own suite owns behavior. Stubs that throw make that
+  boundary enforceable instead of merely intended: if a child called a port during
+  creation, the gate would fail rather than quietly depend on a fixture. Nothing
+  calls them, and the healthy runtime's zero diagnostics is the proof that all
+  eight ports resolved at creation time.
+- **The asymmetry the whole runtime rests on, now permanently witnessed.** A
+  missing PORT leaves a child ACTIVE and publishing, answering calls with a
+  normalized dependency failure and one creation-time diagnostic. A missing
+  required CAPABILITY excludes the child, which appears as `unavailable`. The gate
+  tests both directions, because conflating them would make a child whose adapter
+  is absent indistinguishable from one that was never written.
+
+### What P4 inherits, and what it must not assume
+
+- `packages/domain` and `packages/module-system` remain CLOSED phases. P4 imports
+  them and does not modify them.
+- The Storefront capability graph in LOGIC §8 is much smaller than Admin's: four
+  children with requirements (`menu-detail`, `cart.management`,
+  `checkout.submission`, `order-confirmation`). It has ONE atomic-adjacent file,
+  `submitCheckoutSafely.ts`, and note the name — LOGIC §10 gives Storefront
+  checkout a different shape from Admin's two atomic workflows, so do not assume
+  the `admin.atomic-operation` seam transfers. Read §10's Storefront section
+  before designing it.
+- **D27 has a standing action for P4:** Storefront checkout submission must supply
+  a stable idempotency key from durable identity. A React ref is a responsiveness
+  guard, never the durability mechanism.
+- **D3 (no uniqueness rule on any name or slug) says "revisit at P4"**, because
+  the storefront addresses menus by slug. Worth raising with the owner early in
+  P4 rather than at its phase gate.
+
+### The three items P3 hands to the owner, unresolved by design
+
+All three would require ADDING to `plan.json`, which only the owner may authorize
+(rule 7). None blocks P4. They are recorded in full in `tech-debt.md`:
+
+- **D28 — no child owns forward order status progression.** The most
+  consequential. An operator can read and cancel orders but cannot move one from
+  accepted → preparing → ready → completed. SOURCE could. LOGIC §4 names only
+  three Orders children and §8 gives progression no capability, so this is the
+  target tree's own gap rather than a porting mistake. The gate now ENFORCES it:
+  quietly widening `order-read` or `order-submission` to cover it would fail.
+  First real need is the P6 Orders UI gate.
+- **D16 — no recipe write path.** Confirmed unchanged now that all seven areas
+  exist; no planned file can own recipe editing.
+- **D10 — the shared write primitive lives in a contracts file.** The evidence
+  deferred to this slice is in, and it says PATTERN, not quirk: inventory has
+  three such functions and POS has `posCartFingerprint`, while the other five
+  areas hold types only. Two independent areas hit the same need because LOGIC §8
+  gives neither pair of siblings an edge to share a rule through and cross-child
+  imports are forbidden.
+
+D18 and D23 were deleted from the register this slice, resolved, per its own
+"delete on the way out" rule — their stories live in the S8 and S10 porting-log
+entries and roadmap notes. D29 stays `accepted`, and its parked question is
+answered by the gate itself: **`requires` states what must be RUNNING for a child
+to be safe to publish, not what the child calls.**

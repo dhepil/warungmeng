@@ -219,6 +219,41 @@ a decision made on evidence instead of a guess.
 **Revisit at:** the end of P3, together with the phase-gate slice (13). Whoever
 does that slice should raise it — by then it is a five-minute decision.
 
+**S13 judgement (phase gate, 2026-08-01) — the evidence is in, and it says this is
+a pattern rather than an inventory quirk. OWNER DECISION NEEDED.**
+
+With all seven areas built, two of them put behavior in a contracts file:
+
+- `inventory/inventoryContracts.ts` — `planStockMovement`, `roundEntered`, and
+  `recomputeAverageUnitCost`, shared by three write children (stock-adjustment,
+  stock-consumption, stock-reversal).
+- `pos/posContracts.ts` — `posCartFingerprint`, shared by the cart child and the
+  checkout child.
+
+The other five areas hold types only. So the deferred question — "is this an
+inventory quirk or a gap in the plan?" — has answered itself the way the entry
+predicted would make the decision obvious: two independent areas hit the same
+need, arriving at it from unrelated directions, because LOGIC §8 gives neither
+pair of siblings a capability edge to share the rule through and cross-child
+imports are forbidden. That is a structural consequence of the design, not a
+shortcut either slice took.
+
+**What the owner is being asked.** Whether `plan.json` should gain one line —
+something like `engines/*/*Operations.ts` in the `allow` list — so a shared,
+pure, store-free rule has a named home instead of living in a file documented as
+holding no behavior. It is one line plus moving four functions and updating six
+importers. Nothing breaks either way.
+
+**The honest case for leaving it alone:** it blocks nothing, both files explain at
+length why the exception exists, and the alternative costs a plan edit plus a
+mechanical refactor across two areas for zero behavior change. **The case for
+fixing it:** the next agent reading any other area's contracts file learns that
+"contracts hold no behavior" is not quite true, and may either copy the exception
+where it is not needed or tidy it away and break three inventory children.
+
+Only the owner may widen `plan.json` (rule 7). Not urgent — P4 is a different
+package and inherits none of this.
+
 ---
 
 ## D11 — Average unit cost is unrounded float, and feeds prices · `open`
@@ -337,42 +372,12 @@ costs whatever the seed says. Acceptable while there is no UI at all.
 **Revisit at:** whenever the recipe screen is scheduled. Raise with the owner then,
 since it needs a `plan.json` slot for the new child.
 
----
-
-## D18 — An unpaid order that consumed stock never gets it back · `resolved`
-
-**Found:** P3 S5, from the scout's read of SOURCE's cancellation command.
-**Belongs to the order-cancellation slice, not to inventory.**
-
-POS consumes stock for **every** order regardless of payment status, but SOURCE's
-cancellation only called the reversal when a refund projection was non-empty —
-i.e. only when the order had been paid. An unpaid order that consumed stock and is
-then cancelled silently keeps the stock deducted. SOURCE asserted the
-refund-gated behavior as intended in its own tests, so it is not obviously a
-mistake; what is missing is any handling of the unpaid-but-consumed case.
-
-**Why it is not fixed here:** `stock-reversal` is a capability, and the decision of
-*when* to call it belongs to `admin.orders.order-cancellation` (slice 8). Inventory
-supplying the ability to reverse is the right split; inventory deciding the refund
-policy would not be.
-
-**What it costs to fix:** one condition in the cancellation slice — reverse when
-stock was consumed, not when money was refunded. The reversal side is already
-idempotent and reports a replay, so calling it more eagerly is safe.
-
-**Action for slice 8:** decide the trigger deliberately and record it. Do not
-inherit the refund gate by accident.
-
-**RESOLVED in P3 S8 by owner decision (2026-07-31): return stock whenever it was
-actually deducted, never gated on payment.** The reversal is now attempted on every
-cancellation and `stock-reversal` — the only owner that authoritatively knows whether
-this order consumed anything — is the sole judge; the refund projection still runs
-and reports but decides nothing. Calling it unconditionally required classifying the
-sibling's endings (never-consumed and already-reversed are benign, everything else
-rolls back), because `stock-reversal` reports "never consumed" as a failure, which is
-right for its own caller but an ordinary ending here. Both directions mutation-tested.
-This entry is kept rather than deleted because the register was still showing it
-`open` two slices later; the status line is the thing sessions read.
+**S13 judgement (phase gate, 2026-08-01) — unchanged and now confirmed by the
+complete graph.** All seven areas exist and no child owns recipe editing, so this
+is a genuine structural gap rather than an artefact of an unfinished phase. It
+needs an owner-approved `plan.json` addition and cannot be closed by an agent.
+Raised with the owner alongside D28. Not urgent while there is no UI: recipes can
+still be seeded, and HPP costs whatever the seed says.
 
 ---
 
@@ -468,54 +473,6 @@ still do it. A dedicated `reversal` movement type would close it completely, but
 
 **Revisit at:** whenever the domain is next open. One new union member and one
 constant.
-
----
-
-## D23 — POS is required to call a finance writer SOURCE never called · `resolved`
-
-**Found:** P3 S6, while mapping the finance capability graph. **Slice 10.**
-
-LOGIC §8 says `admin.pos.checkout` requires
-`admin.finance.transaction-recording`. SOURCE's POS checkout did not touch
-Finance at all: it created the order and consumed stock. The sale appeared in the
-ledger because Finance derived it from the stored order, using a deterministic id;
-there was no finance write to retry or de-duplicate.
-
-**Why it was not invented here:** `transaction-recording` faithfully owns SOURCE's
-manual create/edit/void behavior. Adding a second method now solely because a later
-child is said to require the capability would invent what it does before the
-checkout workflow exists. Worse, persisting a sale while still deriving the same
-sale from its order creates two writers for one fact and makes de-duplication
-load-bearing.
-
-**What it costs to leave until slice 10:** nothing at runtime yet — POS checkout is
-not built. Slice 10 cannot be completed by blindly calling the manual-entry method;
-it must reconcile the graph edge with the derived-ledger design.
-
-**Action for slice 10:** decide the legitimate call. Strong default: keep the sale
-derived and make the capability acknowledge/project the committed order rather
-than store a duplicate, but verify that against the atomic checkout contract before
-coding. The operation must report fresh versus replayed if it can be retried.
-
-**RESOLVED in P3 S10 — the strong default held.** The sale stays derived. Checkout
-declares and resolves `admin.finance.transaction-recording` exactly as LOGIC §8
-requires, so the graph edge is honest and the child is correctly excluded when
-Finance is absent, but it never calls the manual writer — there is no second writer
-for one fact and no de-duplication to keep load-bearing. What checkout does instead
-is *verify* the derivation before it finalizes the till: it projects the committed
-order and requires exactly one row of type `sale`, rolling the whole checkout back
-otherwise. No new method was invented on the capability, so `transaction-recording`
-still owns only SOURCE's manual create/edit/void behavior.
-
-Why the verification is not defensive padding: checkout stamps `paid`, but the store
-returns the STORED order, and on an idempotent replay that order may have been
-cancelled since it was written — the domain settles `paid → refunded` on
-cancellation, and a refunded order projects TWO rows (sale + refund). Deriving the
-till's sale from that would book a refund the cash drawer never paid out, which is
-precisely the ledger/till disagreement this entry was opened to prevent. The guard
-is mutation-tested through the real runtime in S10c: a test that calls the domain
-projection directly passes with or without the guard and is therefore worthless
-here, which is how the gap was found in the first place.
 
 ---
 
@@ -635,6 +592,48 @@ be judged. If the owner authorizes a new planned child/file, its store mutation 
 preserve the SOURCE authoritative outcome and reuse the domain transition machine;
 never add the file by bypassing `plan.json`.
 
+**S13 judgement (phase gate, 2026-08-01) — confirmed as a real gap. OWNER DECISION
+NEEDED, and this is the more consequential of the two.**
+
+The complete graph can now be judged, and it confirms the omission rather than
+resolving it. LOGIC §4 names exactly three Orders children (`order-read`,
+`order-submission`, `order-cancellation`) and §8 gives forward progression no
+capability — re-read at S13, so this is the target tree's own gap, not an artifact
+of how we ported it. The phase gate asserts that requirement graph verbatim, so the
+gap is now *enforced*: adding a forward-progression capability by editing an
+existing child would fail the gate, which is the intended outcome.
+
+`OrdersStorePort` has no door for it either, and that is also correct — S8 removed
+SOURCE's `updateStatus(orderId, status)` bypass because it accepted `"cancelled"`
+and could flip a paid order outside any transaction. The bypass was worse than the
+gap.
+
+**What this means in practice.** The ported Admin runtime can create an order,
+read it, and cancel it — but cannot move one from `new` to `accepted` to
+`preparing` to `ready` to `completed`. SOURCE could. Whoever runs the kitchen
+would have no way to advance a ticket. Everything needed already exists: the
+domain owns the transition machine, and the SOURCE repository's authoritative
+`updated | not-found | invalid-transition` write is the shape to reuse.
+
+**What the owner is being asked.** Whether to authorize one new planned child —
+most likely `engines/orders/children/order-progression/` with its child and test
+file — added to `plan.json` with approval. Adding it WITH approval is not drift;
+an agent silently editing the plan to match code it already wrote is. It is a
+slice of its own, not an addition to an existing one.
+
+**If authorized, three constraints carry over:** reuse the domain transition
+machine rather than restating the status rules; preserve the store's authoritative
+outcome instead of pre-reading (the rule S6/S7/S8 all settled); and do NOT create
+a general status-setter door — S8 deleted exactly that from SOURCE, where
+`updateStatus(orderId, status)` accepted `"cancelled"` and could bypass the whole
+multi-owner cancellation workflow. Cancellation must stay unreachable from the
+progression path.
+
+**Deferrable without harm until P6**, when the Admin Orders gate is built and the
+missing button becomes concrete — nothing in P4 or P5 depends on it. The one thing
+that must not happen is a later agent quietly widening `order-read` or
+`order-submission` to cover it.
+
 ---
 
 ## D29 — Cancellation declares `admin.orders.read` but never calls it · `accepted`
@@ -668,3 +667,19 @@ entry is for.
 **Revisit at:** P3 slice 13 phase gate, alongside D28 — if a forward-progression
 child is authorized, it will need the read capability for real, and the question of
 what `requires` means for a write-first child should be answered once for both.
+
+**S13 judgement (phase gate, 2026-08-01) — stays `accepted`, and the gate now
+enforces the declaration.** The phase gate asserts the LOGIC §8 requirement graph
+verbatim, including cancellation's four edges, so dropping the uncalled
+`admin.orders.read` declaration to tidy the code would now turn the suite red.
+That is the right outcome: the doc is the structural authority and the declaration
+is not inert.
+
+The question this entry parked for S13 — what `requires` means for a write-first
+child — is answered by the gate itself: **`requires` states what must be RUNNING
+for this child to be safe to publish, not what it calls.** An Orders area whose
+read capability never came up is an Orders area too broken to cancel through,
+whether or not cancellation happens to call it. The gate's exclusion tests
+demonstrate the mechanism directly. If D28's forward-progression child is
+authorized it will use the read capability for real, but that will not change this
+answer.

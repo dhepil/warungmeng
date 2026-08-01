@@ -1,7 +1,7 @@
 {
   "$comment": "SINGLE SOURCE OF TRUTH for structure + import boundaries. Transcribed from new-target/*.md. Do NOT edit to make a build pass — new-target wins always. Checkers read this file; agents do not rely on memory.",
   "version": 1,
-  "activePhase": "P3-admin-engine",
+  "activePhase": "P4-storefront-engine",
   "phases": [
     {
       "id": "P1-domain",
@@ -21,14 +21,14 @@
       "id": "P3-admin-engine",
       "title": "Admin headless logic",
       "package": "packages/admin-engine",
-      "status": "active",
+      "status": "done",
       "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/admin-engine"
     },
     {
       "id": "P4-storefront-engine",
       "title": "Storefront headless logic",
       "package": "packages/storefront-engine",
-      "status": "pending",
+      "status": "active",
       "source": "new-target/LOGIC-TARGET-FILE-TREE.md §4 packages/storefront-engine"
     },
     {
