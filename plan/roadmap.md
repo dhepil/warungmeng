@@ -16,6 +16,26 @@ append to `porting-log.md` → tick the box below → STOP and report. One slice
 Phase order is locked and each phase is gated on the previous being `done`:
 `P1-domain → P2-module-system → P3-admin-engine → P4-storefront-engine → P5-ui-core → P6-apps`
 
+**`new-target/BACKEND-TARGET-FILE-TREE.md` sets out its own sequence BE-00 → BE-08,
+putting the WooCommerce runtime and backend core BEFORE logic integration. That
+ordering is SUPERSEDED — owner decision, stated 2026-08-01, recorded here
+2026-08-02.** The backend target was written first; the owner then chose to port the
+old Warung Meng logic first, prove it with tests, and treat it as the source-of-truth
+library — then do backend and storefront. So `plan.json` having no backend phase is
+deliberate, not an omission.
+
+What that document still governs is **ownership, not order**: its §4 WooCommerce vs
+WarungMeng Core split, §13 mandatory feasibility gate for cancelling a paid order,
+and §14 public/private surface all stand unchanged. Do not reorder phases, and do not
+add a backend phase, to "resolve" the apparent conflict. If a slice genuinely seems to
+need the backend built first, STOP and ask the owner.
+
+This ordering is safe because the engines hold no data access at all — every child
+reaches data through an injected port (`OrdersStorePort`, `MenuCatalogPort`, …) and no
+port is implemented yet. WooCommerce competes with those unwritten adapters, never
+with ported engine rules: "Engines tidak boleh berubah hanya karena persistence
+authority berpindah" (BACKEND §13).
+
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done & checks green
 
 ---
