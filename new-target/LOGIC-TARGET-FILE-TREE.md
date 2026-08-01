@@ -269,6 +269,9 @@ packages/
 │  │     │     ├─ order-submission/
 │  │     │     │  ├─ orderSubmissionChild.ts
 │  │     │     │  └─ orderSubmission.test.ts
+│  │     │     ├─ order-progression/
+│  │     │     │  ├─ orderProgressionChild.ts
+│  │     │     │  └─ orderProgression.test.ts
 │  │     │     └─ order-cancellation/
 │  │     │        ├─ orderCancellationChild.ts
 │  │     │        ├─ cancelOrderAtomically.ts
@@ -524,6 +527,9 @@ admin.orders.order-cancellation
 ├─ requires admin.inventory.stock-reversal
 ├─ requires admin.finance.refund-projection
 └─ requires admin.atomic-operation
+
+admin.orders.order-progression
+└─ requires admin.orders.read
 
 admin.pos.checkout
 ├─ requires admin.pos.session
