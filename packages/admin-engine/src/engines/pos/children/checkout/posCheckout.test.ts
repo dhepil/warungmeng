@@ -39,9 +39,9 @@ import {
   POS_ISSUE,
   POS_SESSION,
   POS_SESSION_ID,
-  posCartFingerprint,
 } from "../../posContracts";
 import posEngine from "../../posEngine";
+import { posCartFingerprint } from "../../posOperations";
 import posCheckoutChild from "./posCheckoutChild";
 import { calculatePosTotals, createPosOrderNumber } from "./submitPosCheckoutAtomically";
 

@@ -40,7 +40,8 @@ import type {
   PosSessionSnapshot,
   SubmitPosCheckoutInput,
 } from "../../posContracts";
-import { POS_ISSUE, posCartFingerprint } from "../../posContracts";
+import { POS_ISSUE } from "../../posContracts";
+import { posCartFingerprint } from "../../posOperations";
 
 const IDR = (amount: number): Money => ({ amount, currency: "IDR" });
 

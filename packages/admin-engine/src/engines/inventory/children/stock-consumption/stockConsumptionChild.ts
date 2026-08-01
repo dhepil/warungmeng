@@ -8,8 +8,8 @@
 // `apps/admin/src/features/pos/application/usePosCashier.ts`.
 //
 // The invariants are NOT here. Every row goes through `planStockMovement` in the
-// area contracts, the same primitive the manual adjustment uses — which is the
-// whole reason it lives at area level (see the comment on it, and tech-debt D10).
+// area operations, the same primitive the manual adjustment uses — which is the
+// whole reason it lives at area level.
 // This child owns three things SOURCE got wrong, and nothing else: what a recipe
 // component costs in stock, whether an order has already been consumed, and the
 // fact that the rows are one accounting event rather than N.
@@ -42,10 +42,10 @@ import type {
 import {
   CONSUMPTION_ISSUE,
   INVENTORY_STORE_PORT,
-  planStockMovement,
   STOCK_CONSUMPTION,
   STOCK_CONSUMPTION_ID,
 } from "../../inventoryContracts";
+import { planStockMovement } from "../../inventoryOperations";
 
 // ─── What a recipe component costs in stock ───────────────────────────────────
 

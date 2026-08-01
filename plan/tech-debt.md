@@ -31,7 +31,7 @@ it (verify with `git diff --name-only` against the recording commits).
 | D1 | Deleting must clean up the links it leaves behind | `scheduled` |
 | D2 | Saving a menu must check the category really exists | `scheduled` |
 | D8 | Domain tidy pass — lost its carrier slice, see below | `accepted` |
-| D10 | Shared rules get a real home (`*Operations.ts`) | `scheduled` |
+| D10 | Shared rules get a real home (`*Operations.ts`) | `resolved` — commit `refactor(admin-engine): DS-A move shared rules to operations` |
 | D11 | **Money stays as it is; format at display instead** | `accepted` |
 | D12 | "piece" and "portion" genuinely mean the same thing | `accepted`, closed |
 | D16 | Recipe editing authorized; build it with its screen at P5 | `scheduled` |
@@ -285,90 +285,6 @@ everything built on top would catch a regression.
 
 **Why it is still open:** it buys clarity, not capability, and every phase since has
 had something more valuable to do. Skippable indefinitely.
-
----
-
-## D10 — The shared write primitive lives in a contracts file · `scheduled` (DS-A)
-
-**Found:** P3 S4 (inventory part one). **Owner decision, deferred to the end of
-P3 by the owner on 2026-07-31.** Do not ask again before then; do not act on it
-alone either.
-
-`planStockMovement`, `roundEntered` and `recomputeAverageUnitCost` are behavior,
-and they sit in `engines/inventory/inventoryContracts.ts`, which every other area
-uses for types only.
-
-**Why it was done:** all three inventory write paths must share one set of
-invariants — the manual adjustment (S4) and consumption and reversal (S5). LOGIC
-§8 shows neither S5 child requiring a capability from a sibling, so
-`stock-consumption` cannot depend on `stock-adjustment`. `plan.json` lists no
-shared-helper slot inside an area (`engines/*` allows `*Engine.ts`,
-`*Contracts.ts`, and `children/**`), and `packages/domain` is a closed phase. The
-alternatives were a cross-sibling import, which the area-slice pattern forbids, or
-three copies of the invariants — which is exactly how SOURCE ended up with four
-low-stock rules.
-
-**What it costs to fix:** one line in `plan.json` adding something like
-`engines/*/<area>Operations.ts` to the `allow` list, then moving three functions.
-Cheap mechanically. The reason it was not done in-slice is rule 7: the plan wins,
-and an agent editing `plan.json` to make its own design fit is the exact failure
-mode the guardrails exist to prevent. Only the owner can widen it.
-
-**What it costs to leave:** a reader of any other area's contracts file learns
-that "contracts hold no behavior" is not quite true, and the next agent may either
-copy the exception where it is not needed or try to tidy it away and break S5. The
-file says at length why it is there, which mitigates but does not remove this.
-
-**Why it is deferred, and to when.** It blocks nothing: the code works, is tested,
-and explains itself where it sits. The owner cannot judge it cold, and by the end
-of P3 the evidence needed to judge it will exist — all seven areas will have been
-built, so we will know whether "two children of one area must share a rule" is an
-inventory quirk or a gap in the plan. If several areas hit it, the plan needs a
-real slot and the answer is obvious. If inventory is the only one, leaving the
-exception alone is clearly right. The decision makes itself at that point.
-
-**The cost of waiting**, stated honestly: S5 will import this, and so will any
-later area that writes stock. Moving it at the end of P3 means updating several
-importers rather than one. That is a bigger edit but not a harder one, and it buys
-a decision made on evidence instead of a guess.
-
-**Revisit at:** the end of P3, together with the phase-gate slice (13). Whoever
-does that slice should raise it — by then it is a five-minute decision.
-
-**S13 judgement (phase gate, 2026-08-01) — the evidence is in, and it says this is
-a pattern rather than an inventory quirk. OWNER DECISION NEEDED.**
-
-With all seven areas built, two of them put behavior in a contracts file:
-
-- `inventory/inventoryContracts.ts` — `planStockMovement`, `roundEntered`, and
-  `recomputeAverageUnitCost`, shared by three write children (stock-adjustment,
-  stock-consumption, stock-reversal).
-- `pos/posContracts.ts` — `posCartFingerprint`, shared by the cart child and the
-  checkout child.
-
-The other five areas hold types only. So the deferred question — "is this an
-inventory quirk or a gap in the plan?" — has answered itself the way the entry
-predicted would make the decision obvious: two independent areas hit the same
-need, arriving at it from unrelated directions, because LOGIC §8 gives neither
-pair of siblings a capability edge to share the rule through and cross-child
-imports are forbidden. That is a structural consequence of the design, not a
-shortcut either slice took.
-
-**What the owner is being asked.** Whether `plan.json` should gain one line —
-something like `engines/*/*Operations.ts` in the `allow` list — so a shared,
-pure, store-free rule has a named home instead of living in a file documented as
-holding no behavior. It is one line plus moving four functions and updating six
-importers. Nothing breaks either way.
-
-**The honest case for leaving it alone:** it blocks nothing, both files explain at
-length why the exception exists, and the alternative costs a plan edit plus a
-mechanical refactor across two areas for zero behavior change. **The case for
-fixing it:** the next agent reading any other area's contracts file learns that
-"contracts hold no behavior" is not quite true, and may either copy the exception
-where it is not needed or tidy it away and break three inventory children.
-
-Only the owner may widen `plan.json` (rule 7). Not urgent — P4 is a different
-package and inherits none of this.
 
 ---
 

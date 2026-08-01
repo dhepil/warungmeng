@@ -58,11 +58,6 @@ export interface PosCartItem {
   readonly note: string;
 }
 
-/** Exact cart aggregate identity shared by cart CAS and checkout finalization. */
-export function posCartFingerprint(items: readonly PosCartItem[]): string {
-  return JSON.stringify(items);
-}
-
 /**
  * State needed by S9 plus identity/cash fields S10 must update transactionally.
  * Receipt and pending-sync state stay out: S10's target is atomic, unlike SOURCE's

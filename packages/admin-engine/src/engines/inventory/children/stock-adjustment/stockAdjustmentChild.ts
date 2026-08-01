@@ -14,7 +14,7 @@
 //     and InventoryMaterialEditorDialog.tsx — where most of this area's actual
 //     RULES were living, as AntD form props. See `inventoryContracts.ts`.
 //
-// The decision-making is NOT here. `planStockMovement` in the area contracts
+// The decision-making is NOT here. `planStockMovement` in the area operations
 // validates and computes every movement, because S5's consumption and reversal
 // go through the same primitive and LOGIC §8 shows neither of them requiring a
 // capability from a sibling — so the invariants cannot live in this child. This
@@ -41,12 +41,11 @@ import type {
 import {
   INVENTORY_STORE_PORT,
   MINIMUM_STOCK_FLOOR,
-  planStockMovement,
-  roundEntered,
   STOCK_ADJUSTMENT,
   STOCK_ADJUSTMENT_ID,
   UNIT_COST_FLOOR,
 } from "../../inventoryContracts";
+import { planStockMovement, roundEntered } from "../../inventoryOperations";
 
 // ─── Ingredient validation ───────────────────────────────────────────────────
 //

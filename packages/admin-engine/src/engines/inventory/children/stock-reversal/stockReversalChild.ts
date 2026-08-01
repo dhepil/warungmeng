@@ -36,10 +36,10 @@ import type {
 import {
   CONSUMPTION_ISSUE,
   INVENTORY_STORE_PORT,
-  planStockMovement,
   STOCK_REVERSAL,
   STOCK_REVERSAL_ID,
 } from "../../inventoryContracts";
+import { planStockMovement } from "../../inventoryOperations";
 
 /**
  * The movement type a reversal writes.

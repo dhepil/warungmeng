@@ -16,9 +16,9 @@ import {
   POS_CART_ID,
   POS_ISSUE,
   POS_OPERATIONAL_STATE_PORT,
-  posCartFingerprint,
 } from "../../posContracts";
 import posEngine from "../../posEngine";
+import { posCartFingerprint } from "../../posOperations";
 import posCartChild, {
   posCartItemLineTotal,
   posCartItemUnitPrice,

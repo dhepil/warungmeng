@@ -25,9 +25,9 @@ import {
   POS_CART_ID,
   POS_ISSUE,
   POS_OPERATIONAL_STATE_PORT,
-  posCartFingerprint,
 } from "../../posContracts";
 import { POS_ENGINE_ID } from "../../posEngine";
+import { posCartFingerprint } from "../../posOperations";
 
 const IDR = (amount: number): Money => ({ amount, currency: "IDR" });
 

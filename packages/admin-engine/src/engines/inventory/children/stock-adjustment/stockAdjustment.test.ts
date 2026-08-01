@@ -32,12 +32,14 @@ import type {
 import {
   INVENTORY_STORE_PORT,
   MOVEMENT_ISSUE,
-  planStockMovement,
-  recomputeAverageUnitCost,
-  roundEntered,
   STOCK_ADJUSTMENT,
   STOCK_ADJUSTMENT_ID,
 } from "../../inventoryContracts";
+import {
+  planStockMovement,
+  recomputeAverageUnitCost,
+  roundEntered,
+} from "../../inventoryOperations";
 import inventoryEngine from "../../inventoryEngine";
 import stockAdjustmentChild, { validateIngredientValues } from "./stockAdjustmentChild";
 
