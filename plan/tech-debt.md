@@ -37,7 +37,7 @@ commits scheduled work only; later PD commits perform it.
 | D12 | "piece" and "portion" genuinely mean the same thing | `accepted`, closed |
 | D16 | Recipe editing authorized; build it with its screen at P5 | `scheduled` |
 | D19 | Folded into D11 — same reasoning, same answer | `accepted` |
-| D20 | **Per-item historical profit — via a NEW CHILD, no rewrite** | `scheduled` |
+| D20 | **Per-item historical profit — via a NEW CHILD, no rewrite** | `resolved` — ca27c32, f147482 |
 | D22 | Dedicated reversal type — lost its carrier slice, see below | `accepted` |
 | D25 | Warung Meng is **one outlet**. Closed as deliberate | `accepted`, closed |
 | D27 | Not a decision — resolves when P4 storefront checkout lands | `open` |
@@ -86,7 +86,7 @@ items with `menuItemId`, `quantity` and `lineTotal` (`orders.ts:39-48`); and
 historical profit is a JOIN over existing data, so it is a new READ child, not a
 domain change.
 
-**Three constraints for whoever builds it:**
+**Three constraints carried by the resolved implementation:**
 1. When one order contains two dishes sharing an ingredient, the stock record is a
    single row covering both. Splitting it by recipe proportion is a RECONSTRUCTION,
    not a recorded fact. Say so in the capability's own documentation.
@@ -97,10 +97,10 @@ domain change.
    as zero — a zero cost reads as pure profit, which is the one wrong answer that
    looks plausible. S11 already established the degraded-source pattern; reuse it.
 
-**Recommended shape:** one new child in the INVENTORY area, because recipes and
+**Resolved shape:** one new child in the INVENTORY area, because recipes and
 movements already live there, requiring `admin.orders.read` and publishing per-menu
-historical cost. Dashboard then joins it against revenue it already reads. Dashboard
-must NOT gain repository access — that is D15, which S11 resolved.
+historical cost plus the sale revenue/profit read through that capability. Dashboard
+was not edited and did NOT gain repository access — that is D15, which S11 resolved.
 
 ### D8 and D22 lost their carrier, and that is the honest status
 
@@ -118,8 +118,9 @@ claim had been written and re-endorsed across several sessions because everyone
 quoted the entry instead of reading the glob list. What actually withholds permission
 is `new-target/LOGIC-TARGET-FILE-TREE.md` (§4 names the children, §8 grants the
 capabilities), plus the S13 phase gate, which asserts both verbatim and turns red on
-a 24th child. So the authorizing act is an edit to the DESIGN DOCUMENT, belonging in
-the slice that builds the child as its own clearly-labelled first commit.
+any unlisted child. So the authorizing act is an edit to the DESIGN DOCUMENT,
+belonging in the slice that builds the child as its own clearly-labelled first
+commit.
 
 **D10 was the last item that genuinely needed a `plan.json` line, and it is now
 resolved** — `*Operations.ts` and `*Operations.test.ts` were added to the P3 allow
@@ -431,6 +432,13 @@ it (P5), not before. Recorded in `roadmap.md` under P5. The authorizing edit is 
 `new-target/LOGIC-TARGET-FILE-TREE.md`, NOT to `plan.json` — this entry said
 `plan.json` twice above and was wrong both times.
 
+**DS-C dependency note (2026-08-01).** The resolved historical-profit child now
+publishes the assumptions `recipe-proportional-reconstruction` and
+`current-recipe-assumed-unchanged`, and it degrades when recorded movement quantity
+does not match the current recipe. Before this editor enables its first recipe
+write, decide recipe versioning and revisit that DS-C contract; otherwise editing a
+recipe would silently restate past cost and profit.
+
 ---
 
 ## D19 — HPP rounds three times over the same figures · `accepted` (revised 2026-08-01, with D11)
@@ -460,36 +468,6 @@ correct to within a fraction of a rupiah and cash is unaffected. The one thing w
 preserving from this entry: `calculateGrossMarginPercentage` rounds without the
 `Number.EPSILON` nudge that `roundMoney` uses, so one module rounds two ways — if
 any future slice legitimately touches `finance.ts`, make those consistent then.
-
----
-
-## D20 — Historical dashboard COGS needs movement-to-menu attribution · `scheduled` (DS-C, new child — no domain rewrite)
-
-**Found:** P3 S5, from the scout's sweep for HPP consumers. **Slice 11.**
-
-SOURCE multiplied **today's** HPP—derived from today's average ingredient cost—by
-historical order quantities. A later purchase could therefore rewrite an earlier
-month's COGS and gross margin.
-
-**What S11 fixed:** stock-consumption now snapshots sale-time `unitCost` on every
-new consumption movement instead of writing `null`. The amount is expressed in
-the movement's entered unit, including conversion from the ingredient base unit.
-Reports flag legacy consumption rows with a null cost as degraded. This does not
-round the snapshot, so D11/D19 remains a separate precision concern.
-
-**Why this remains open:** the domain's reporting snapshot and aggregators still
-accept `menuHpp`, while an inventory movement carries only the order
-`referenceId`—not an order-item or menu attribution. The exact Dashboard capability
-graph also contains no catalog/HPP dependency. P3 S11 therefore neither reopened
-the closed P1 domain nor invented a hidden dependency. It passes no current HPP,
-preserves the domain's missing-cost signal, and does not silently restate history;
-but it cannot yet calculate historical item-level COGS from the new snapshots.
-
-**Decision needed later:** when the domain/data attribution model is reopened,
-link consumption rows to order items or menu quantities and teach the domain
-reporting owner to aggregate their stored costs. Until then the capture side is
-ready, legacy rows degrade explicitly, and the historical COGS reader remains
-incomplete.
 
 ---
 

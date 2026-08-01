@@ -962,3 +962,62 @@ to be safe to publish, not what the child calls.**
   paragraph was accurate when written. D10 was resolved by DS-A and D28 is now
   resolved by DS-B; only D16 remains unresolved from that specific list. Historical
   reasoning stays in place, while these later sections record the current outcome.
+
+## Decisions locked during PD DS-C (historical item profit)
+
+- **Authorization preceded implementation.** Commit ca27c32 changes only
+  `new-target/LOGIC-TARGET-FILE-TREE.md`: §4 adds the child/test, §8 grants
+  `admin.inventory.historical-item-profit` requiring `admin.orders.read`, and the
+  capability note records all three D20 caveats. Product commit f147482 follows;
+  `plan.json` was not edited because its existing child/test globs already apply.
+- **Inventory owns the reader; Dashboard owns no repository.** The child resolves
+  Orders through the published read capability and resolves only Inventory's own
+  injected store. Dashboard, its graph, `packages/domain`, and persistence shapes
+  are unchanged. This keeps S11's D15 closure intact.
+- **The result says RECONSTRUCTION, not fact.** Movements identify an order, never
+  an order item. The child totals recorded sale-time movement costs and divides a
+  shared ingredient by each dish's current recipe consumption proportion, then
+  aggregates sale-time revenue, reconstructed cost, and reconstructed profit per
+  menu. Collections carry literal `recipe-proportional-reconstruction` and
+  `current-recipe-assumed-unchanged`; field names also say `reconstructedCost` and
+  `reconstructedProfit` rather than presenting inferred figures as measured ones.
+- **D16 is now a concrete compatibility boundary.** Capture and reconstruction use
+  one `consumptionQuantity` rule in `inventoryOperations.ts`. Recorded movement
+  quantity must still match current recipe quantity; a mismatch degrades rather
+  than silently rewriting history. D16 now says recipe versioning must be decided
+  before the first editor write lands at P5.
+- **Pre-S11 null is UNKNOWN, never zero or partial.** Any included consumption row
+  whose `unitCost` is null makes the affected order item unknown. If one historical
+  line in a menu aggregate is unknown, both aggregate cost and profit are null and
+  `unknownOrderItemCount` says why; known lines are never exposed as a plausible
+  complete subtotal. Revenue remains visible because it is independently recorded.
+- **No precision rewrite happened.** Movement snapshot cost, proportional
+  allocation, packaging, and extras keep their full numbers. DS-C adds no rounding
+  and does not touch D11/D19; P5's display formatter remains the only scheduled
+  presentation decision.
+- **The child owns selection and total ordering.** It re-applies outlet, Jakarta
+  date period, consumption type/reference, and optional menu filtering after its
+  sources answer. It reconstructs all dishes in an order before applying a menu
+  filter so shared cost still has the right denominator. Equal order/movement
+  timestamps break by id, and equal menu names break by menu id.
+- **Partial failure stays useful; no source failure becomes fake emptiness.** Orders,
+  movements, and recipes load independently. A movement or recipe failure degrades
+  every affected cost while the Orders row set and revenue remain usable. If all
+  three fail, the call fails. Orders is the authoritative per-item row source, so
+  Orders failure also fails rather than manufacturing an empty collection from
+  inventory-only data.
+- **Port absence stays active-but-unusable.** With Orders read alive but no Inventory
+  store, the child remains active and published, emits exactly one diagnostic at
+  creation, and every call returns the same normalized dependency failure. Missing
+  Orders capability is different: the dependency graph excludes the child.
+- **Permanent proof is capability-level and mutation-sensitive.** All 15 new tests
+  capture the capability through a probe child. S13 now asserts 25 literal child
+  ids/capability mappings, seven children with requirements, and the exact new read
+  edge. Three focused mutations each made exactly one test red: null cost treated
+  as zero, recipe proportions replaced with equal division, and removal of the
+  duplicate-name menu-id tie-break. Each restoration produced SHA-256
+  `C102E6EC5E6EB062807A399A6F48FEC524BAAFF66D152B1B40025649FBE9321E`.
+  Full check: structure 91 files, boundaries, typecheck, 28 files and 543 tests.
+- **D20 is closed; DS-D is not started.** Its live register entry was deleted under
+  the register's own rule, while the durable reasoning now lives here and in the
+  porting log. Roadmap records DS-C complete and leaves DS-D unchecked.
