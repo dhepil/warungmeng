@@ -67,53 +67,63 @@ Depends on domain + module-system. MUST NOT import storefront-engine or React.
 - [x] S13 `adminEngineGraph.test.ts` — phase gate (real on-disk discovery; the
       completeness proof the `engines/*` globs cannot give)
 
-## PD — Debt settlement  `[ ]`  ← PROPOSED, awaiting owner go
-On 2026-08-01 the owner decided every open item in `tech-debt.md` in one sitting
-(see "Owner decisions" at the top of that file). Two of those decisions — money
-becomes whole rupiah (D11/D19), and per-item historical profit is needed (D20) —
-change `packages/domain`, a CLOSED phase. Three more items (D8, D22, and D19's
-rounding inconsistency) were each parked with the words "revisit whenever the domain
-is next open", so they come along rather than being paid for twice.
+## PD — Debt settlement  `[ ]`  ← awaiting owner go, slice by slice
+The owner decided every open item in `tech-debt.md` on 2026-08-01, then REVISED two
+of those decisions the same day once the cost was clear. Read the "Owner decisions"
+section at the top of `tech-debt.md` before starting any slice here — it explains the
+revision, which matters more than the original decision.
 
-**Why this goes BEFORE P4 and not after.** The storefront shows prices and totals.
-Building it against the old money rules and then changing those rules underneath it
-means porting the same screens twice. Nothing here depends on P4; P4 depends on this.
+**What changed:** the money rewrite (whole rupiah across the domain) is CANCELLED —
+cash was already whole rupiah, and the fractions live only in per-unit cost rates
+where they are required. It became a display formatter at P5 instead. And per-item
+historical profit needs no domain rewrite: the data is already recorded, so it is a
+new read child. **Neither remaining item reopens `packages/domain`, so nothing here
+blocks P4 anymore.** Debt-first is the owner's preference, not a dependency.
 
-**Each block needs the owner to flip `activePhase` first** (the one allowed
-`plan.json` edit) — domain slices under `P1-domain`, admin slices under
-`P3-admin-engine` — then back to `P4-storefront-engine` when PD is done. No phase is
-added to `plan.json`; PD is an ordering concept and lives only in this file.
+Every slice below is ADDITIVE or local. No closed phase is reopened.
+Slices are lettered (DS-A…) not numbered, because the original DS1-DS8 numbering was
+published in a superseded plan and reusing those numbers would silently conflate the
+two. Order within the block is a suggestion; only DS-A→DS-C is a hard dependency.
 
-Domain block (reopen `P1-domain`):
-- [ ] DS1 whole-rupiah money rule in one place, applied to average unit cost, HPP
-      and the recommended price (D11 + D19). **Expect many of the 516 tests to
-      change their expected figures — that is the point of the slice, and also
-      exactly where a mistake can hide. List every changed expectation in the
-      commit, and mutation-test the rounding rule itself.**
-- [ ] DS2 dedicated `reversal` movement type (D22) + the optional tidy pass (D8),
-      both of which only ever needed the domain to be open
-- [ ] DS3 reporting attribution model — let a consumption row carry which menu item
-      it was sold for, and teach the aggregators to add up stored costs (D20, domain
-      half)
+Set `activePhase` to `P3-admin-engine` for this block (the one allowed plan edit),
+and back to `P4-storefront-engine` when it is done. **PD is an ordering concept in
+this file only — it is NOT a phase in `plan.json`.**
 
-Admin block (reopen `P3-admin-engine`):
-- [ ] DS4 shared rules get a real home: `engines/*/*Operations.ts` (D10). **This is
-      the only item on the whole list that needs a `plan.json` line added.** Do it
-      first, because DS5 touches the same inventory files.
-- [ ] DS5 record menu attribution when consumption is written (D20, engine half)
-- [ ] DS6 per-item historical profit in dashboard reports — completes D20
-- [ ] DS7 referential integrity: each child cleans up the links it leaves behind on
-      delete, and saving a menu checks the category exists (D1 + D2)
-- [ ] DS8 `order-progression` child (D28). **First commit of this slice amends
-      `new-target/LOGIC-TARGET-FILE-TREE.md` §4 and §8** — that is the owner's
-      authorizing act and must stand alone, clearly labelled, before any code. Reuse
-      the domain transition machine, keep the store's authoritative
-      `updated | not-found | invalid-transition` outcome, and never create a general
-      status-setter door (S8 deleted exactly that from SOURCE).
+- [ ] DS-A shared rules get a real home: `engines/*/*Operations.ts` (D10).
+      **The only item in the whole block needing a `plan.json` line added** — owner
+      approves that line, then four functions move out of two contracts files and
+      six importers update. Do it FIRST: DS-C touches the same inventory files.
+- [ ] DS-B `order-progression` child (D28) — the kitchen can advance a ticket again
+      (`accepted → preparing → ready → completed`). **First commit amends
+      `new-target/LOGIC-TARGET-FILE-TREE.md` §4 and §8** — the owner's authorizing
+      act, standing alone and clearly labelled, before any code. Reuse the domain
+      transition machine; keep the store's authoritative
+      `updated | not-found | invalid-transition` outcome; and NEVER create a general
+      status-setter door — S8 deleted exactly that from SOURCE because it accepted
+      `"cancelled"` and could bypass the whole atomic cancellation workflow.
+- [ ] DS-C per-item historical profit (D20) — a new READ child in the INVENTORY
+      area joining data that already exists (movement `unitCost` snapshots from S11,
+      order items, recipes). Same design-doc-first commit as DS-B. Three constraints
+      are non-negotiable and spelled out in D20: the per-dish split is a
+      RECONSTRUCTION not a recorded fact and must say so; it is exact only while
+      recipes cannot be edited, so revisit at D16; and pre-S11 rows must report
+      **unknown**, never zero — zero reads as pure profit, the one wrong answer that
+      looks plausible. Dashboard joins this against revenue it already reads and
+      must NOT gain repository access (that is D15, resolved at S11).
+- [ ] DS-D referential integrity (D1 + D2) — each child cleans up the links it
+      leaves behind on delete, and saving a menu checks its category exists. Local
+      to the menu area, no new files. Watch for existing data with broken links:
+      the category check can make previously-saveable rows start failing.
 
-NOT in this block: D16 recipe-editor is **authorized** but the owner chose to build
-it with the screen that needs it, so it stays `scheduled` until P5. D27 is not a
-decision — it resolves itself when P4 storefront checkout lands.
+Deferred OUT of this block, deliberately:
+- **D16 recipe-editor** is AUTHORIZED but the owner chose to build it with the screen
+  that needs it → P5. When it lands, revisit DS-C's constraint 2 (recipe versioning).
+- **Money formatter** (replacing the cancelled money rewrite, D11/D19) → P5, listed
+  under that phase. Cost values display as whole rupiah; the stored numbers keep
+  full precision.
+- **D27** is not a decision; it resolves when P4 storefront checkout lands.
+- **D8, D22** reverted to `accepted` — both were waiting for a domain reopening that
+  is no longer happening.
 
 ## P4 — packages/storefront-engine (storefront headless logic)  `[ ]`
 Depends on domain + module-system. MUST NOT import admin-engine or React.
@@ -133,6 +143,26 @@ internal — only engine public entries.
 - [ ] S4 renderer (`UiHost`, `AntdUiRenderer`, `SurfaceShell`,
       `NavigationRenderer`, `iconRegistry`) + `renderer.test.tsx`
 - [ ] S5 theme (`themeContracts`, `createAntdTheme`, `ThemeProvider`) + `styles/uiCore.css`
+
+Carried into P5 from the debt settlement (see `tech-debt.md` "Owner decisions"):
+- [ ] **Money formatter** — replaces the CANCELLED whole-rupiah domain rewrite
+      (D11/D19). Cash is already whole rupiah; only per-unit cost RATES carry
+      fractions, and they must keep them (a spice at 800/kg is 0.8 rupiah/gram).
+      So format at the edge: display whole rupiah, store full precision. P5 has no
+      allow-globs — every file is `exact` — so this belongs in an existing file,
+      most naturally `headless/` since formatting needs no React. Known and
+      accepted: a column of small costs can display rows that do not visibly sum
+      to their displayed total. Affects displayed COST breakdowns only, never cash.
+- [ ] **Recipe editor** (D16) — AUTHORIZED; the owner chose to build it with the
+      screen that needs it. Needs a new child in the admin engine, so its first
+      commit amends `new-target/LOGIC-TARGET-FILE-TREE.md` §4/§8, exactly as DS-B
+      and DS-C do. Port the rules that lived in SOURCE's AntD form props (at least
+      one component, quantity min 0.01, cost floors, unit-compatibility filtering)
+      into logic. **Do NOT reproduce SOURCE's index-positional component ids**
+      (`recipe?.components[index]?.id ?? …`) — deleting a row made the remaining
+      rows inherit their neighbours' identities. **When this lands, revisit DS-C
+      constraint 2:** editable recipes mean a recipe change silently rewrites what
+      past months look like, so recipe versioning must be decided then.
 
 ## P6 — apps (admin + storefront shells; gates only)  `[ ]`
 Thin app shells that mount ui-core + wire engines. 7 admin gates, 4 storefront gates.

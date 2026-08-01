@@ -20,50 +20,117 @@ Status: `open` — live, undecided · `accepted` — deliberate, not planned to 
 
 ## Owner decisions — 2026-08-01 ("settle debt once for all")
 
-The owner reviewed every open item in one sitting and decided all of them. **These
-are settled. Do not re-litigate them; do not ask again.** Each affected entry below
-carries a status line pointing here. Nothing has been BUILT yet — these decisions
-schedule work, they do not perform it.
+The owner decided every open item in one sitting, then **revised two of those
+decisions the same day** after the cost of the first version became clear. What is
+written here is the FINAL state. **Settled — do not re-litigate, do not ask again.**
+Nothing here has been BUILT yet; these decisions schedule work, they do not perform
+it (verify with `git diff --name-only` against the recording commits).
 
 | # | Decision | Result |
 |---|---|---|
 | D1 | Deleting must clean up the links it leaves behind | `scheduled` |
 | D2 | Saving a menu must check the category really exists | `scheduled` |
-| D8 | Domain tidy pass — fold into the domain reopening below | `scheduled` |
+| D8 | Domain tidy pass — lost its carrier slice, see below | `accepted` |
 | D10 | Shared rules get a real home (`*Operations.ts`) | `scheduled` |
-| D11 | **Money becomes whole rupiah everywhere** | `scheduled` |
+| D11 | **Money stays as it is; format at display instead** | `accepted` |
 | D12 | "piece" and "portion" genuinely mean the same thing | `accepted`, closed |
-| D16 | Recipe editing is authorized; build it with the screen | `scheduled` |
-| D19 | Folded into D11 — one rounding rule, applied once | `scheduled` |
-| D20 | **Per-item historical profit IS needed** | `scheduled` |
-| D22 | Dedicated reversal movement type — fold into domain reopening | `scheduled` |
+| D16 | Recipe editing authorized; build it with its screen at P5 | `scheduled` |
+| D19 | Folded into D11 — same reasoning, same answer | `accepted` |
+| D20 | **Per-item historical profit — via a NEW CHILD, no rewrite** | `scheduled` |
+| D22 | Dedicated reversal type — lost its carrier slice, see below | `accepted` |
 | D25 | Warung Meng is **one outlet**. Closed as deliberate | `accepted`, closed |
 | D27 | Not a decision — resolves when P4 storefront checkout lands | `open` |
-| D28 | **Forward order progression is authorized** | `scheduled` |
+| D28 | **Forward order progression authorized** — new child | `scheduled` |
 
-**The consequence that matters most.** Two decisions (D11 whole rupiah, D20 per-item
-historical profit) both change `packages/domain`, which is a CLOSED phase, and D20
-additionally changes how inventory records movements and how reporting adds them up.
-Three more items (D8, D22, and D19's rounding consistency) were each parked with the
-words "revisit whenever the domain is next open" — so that moment is now, and they
-come along rather than being done twice.
+### The revision, and why it matters more than the original decision
 
-**Therefore the domain work must land BEFORE P4-storefront-engine, not after.** The
-storefront displays prices and totals. Building it against the old money rules and
-then changing those rules underneath it means porting the same screens twice. This
-is a sequencing question the owner must answer, because it means P4 pauses before it
-starts — it is recorded in `roadmap.md`, not decided here.
+The first version of D11 was "money becomes whole rupiah everywhere". Building that
+would have rewritten expected figures across 516 tests — the riskiest slice on the
+whole list, and one where a mistake hides behind "the numbers were supposed to
+change". The owner asked whether display formatting could do the job instead. It
+can, and checking why exposed that the premise was wrong:
 
-**Two new children are authorized** (`order-progression`, `recipe-editor`). Note for
-whoever builds them: the earlier text in D16/D28 saying they need a line added to
-`plan.json` is WRONG and was corrected on 2026-08-01. `plan.json` already permits any
-file at `engines/<area>/children/<name>/<name>Child.ts` through an existing pattern.
-What actually withholds permission is `new-target/LOGIC-TARGET-FILE-TREE.md`, whose
-§4 tree names the children and whose §8 graph grants the capabilities — plus the S13
-phase gate, which asserts both verbatim and will turn red on a 24th child. So the
-authorizing edit is to the DESIGN DOCUMENT, and it belongs in the same slice that
-builds the child, as its own clearly-labelled first commit. `plan.json` needs no
-change for either. D10 is the only item here that genuinely needs a `plan.json` line.
+- **Cash is ALREADY whole rupiah, and always was.** An order total is whole prices ×
+  quantities, plus `Math.round` tax, rounded to the nearest 500 at the till
+  (`submitPosCheckoutAtomically.ts:107-112`). Every finance row copies
+  `order.totals.total` verbatim (`finance.ts:264`). The ledger and the cash drawer
+  were never in disagreement.
+- **Fractions exist only in COSTING, where they are required.** `averageUnitCost` is
+  a rate per BASE unit — per gram, per millilitre. A spice at 800/kg is 0.8
+  rupiah/gram; rounding that to 1 is a 25% error on every gram of every recipe
+  forever, and rounding to 0 makes the ingredient free. Rounding per-unit rates
+  would have been an actively WRONG change, not merely an expensive one.
+
+So the real defect was never wrong arithmetic — it was that a cost like `1234.5678`
+had no defined way of being SHOWN. That is a display concern and belongs in the
+display layer. **D11 and D19 are therefore `accepted`, and a money formatter is
+recorded against P5 in `roadmap.md`.**
+
+**The residue, stated honestly so a formatter is not mistaken for a fix:** the
+average cost still compounds a small error per purchase with no way to recompute
+from the ledger (D11's original complaint), and HPP still rounds three times over
+the same figures (D19). Both are small, neither touches cash, and both are now
+deliberate. Also note a known consequence of edge formatting: a column of small
+costs can display rows that do not visibly sum to their displayed total (0.4 + 0.4
+shows as 0 + 0 = 1). Normal, affects displayed COST breakdowns only, never cash.
+
+### D20 needs no rewrite either — the same lesson, applied again
+
+The original plan reopened `packages/domain` to add an attribution model. It does
+not need to. Everything required is already recorded: a consumption movement carries
+`ingredientId`, `referenceId` (the order), `baseQuantityDelta` and — since S11 —
+`unitCost` snapshotted at sale time (`inventory.ts:50-62`); an order carries its
+items with `menuItemId`, `quantity` and `lineTotal` (`orders.ts:39-48`); and
+`MenuRecipe` links a menu item to its ingredients (`inventory.ts:72-78`). Per-item
+historical profit is a JOIN over existing data, so it is a new READ child, not a
+domain change.
+
+**Three constraints for whoever builds it:**
+1. When one order contains two dishes sharing an ingredient, the stock record is a
+   single row covering both. Splitting it by recipe proportion is a RECONSTRUCTION,
+   not a recorded fact. Say so in the capability's own documentation.
+2. That reconstruction is exact **today** only because recipes cannot be edited at
+   all (D16). Once the authorized recipe editor ships, changing a recipe silently
+   changes what past months look like. Decide recipe versioning THEN, not now.
+3. Pre-S11 movements have no cost snapshot. They must report as **unknown**, never
+   as zero — a zero cost reads as pure profit, which is the one wrong answer that
+   looks plausible. S11 already established the degraded-source pattern; reuse it.
+
+**Recommended shape:** one new child in the INVENTORY area, because recipes and
+movements already live there, requiring `admin.orders.read` and publishing per-menu
+historical cost. Dashboard then joins it against revenue it already reads. Dashboard
+must NOT gain repository access — that is D15, which S11 resolved.
+
+### D8 and D22 lost their carrier, and that is the honest status
+
+Both were parked with "revisit whenever the domain is next open", and the revised
+D11/D20 decisions mean **the domain is no longer being reopened**. Neither is worth
+opening a closed phase on its own, so both revert to `accepted`. If some future work
+opens `packages/domain` for an unrelated reason, these two come along then.
+
+### Structural note — how a new child is actually authorized
+
+`plan.json` already permits `engines/<area>/children/<name>/<name>Child.ts` through
+an existing allow glob, so **no `plan.json` line is needed for a new child**. Earlier
+text in D16/D28 claiming otherwise was wrong and was corrected on 2026-08-01; the
+claim had been written and re-endorsed across several sessions because everyone
+quoted the entry instead of reading the glob list. What actually withholds permission
+is `new-target/LOGIC-TARGET-FILE-TREE.md` (§4 names the children, §8 grants the
+capabilities), plus the S13 phase gate, which asserts both verbatim and turns red on
+a 24th child. So the authorizing act is an edit to the DESIGN DOCUMENT, belonging in
+the slice that builds the child as its own clearly-labelled first commit.
+
+**D10 is the only remaining item that genuinely needs a `plan.json` line**
+(`*Operations.ts` matches no existing glob).
+
+### Ordering
+
+The original recording said the debt block must precede P4 because whole-rupiah money
+would otherwise force the storefront to be ported twice. **That reason is gone** — the
+money decision was revised and D20 became additive. Nothing in this list now blocks
+P4. The owner's chosen order is still debt-first, because the items are small and the
+admin engine is fresh in the plan-of-record, whereas P4 is a whole phase that would
+push that context far away. Easily reversed if the storefront becomes urgent.
 
 ---
 
@@ -208,7 +275,7 @@ worse until option ordering has one owner.
 
 ---
 
-## D8 — P1 domain tidy pass never ran · `scheduled`
+## D8 — P1 domain tidy pass never ran · `accepted` (carrier slice dropped 2026-08-01)
 
 **Found:** P1 S7, deferred at the time because no tests existed yet.
 
@@ -221,7 +288,7 @@ had something more valuable to do. Skippable indefinitely.
 
 ---
 
-## D10 — The shared write primitive lives in a contracts file · `scheduled`
+## D10 — The shared write primitive lives in a contracts file · `scheduled` (DS-A)
 
 **Found:** P3 S4 (inventory part one). **Owner decision, deferred to the end of
 P3 by the owner on 2026-07-31.** Do not ask again before then; do not act on it
@@ -305,7 +372,7 @@ package and inherits none of this.
 
 ---
 
-## D11 — Average unit cost is unrounded float, and feeds prices · `scheduled`
+## D11 — Average unit cost is unrounded float, and feeds prices · `accepted` (revised 2026-08-01 — format at display)
 
 **Found:** P3 S4, reading SOURCE's cost math.
 
@@ -334,6 +401,15 @@ less so. Nobody will notice until two reports disagree by a rupiah.
 
 **Revisit at:** whenever `Money` gains an integer-minor-unit invariant. Related:
 D12.
+
+**REVISED 2026-08-01 — `accepted`, superseding the 'whole rupiah' decision made
+earlier the same day.** Rounding this value would be actively WRONG, not merely
+expensive: it is a rate per BASE unit, so a spice at 800/kg is 0.8 rupiah per gram
+and rounding it to 1 is a 25% error on every gram of every recipe, forever. Cash was
+never affected — order totals and every finance row are already whole rupiah. The
+real gap was that a cost like `1234.5678` had no defined way of being DISPLAYED, so
+a money formatter is recorded against P5 instead. The compounding-error residue is
+accepted as stated above. See "Owner decisions" at the top of this file.
 
 ---
 
@@ -418,19 +494,27 @@ the screen is what needs it.
 **What it costs to leave:** recipes can only be changed by seeding data, so HPP
 costs whatever the seed says. Acceptable while there is no UI at all.
 
-**Revisit at:** whenever the recipe screen is scheduled. Raise with the owner then,
-since it needs a `plan.json` slot for the new child.
+**Revisit at:** whenever the recipe screen is scheduled. ~~since it needs a
+`plan.json` slot for the new child~~ — **CORRECTED 2026-08-01: it does NOT need a
+`plan.json` slot.** The allow glob `engines/*/children/**/*Child.ts` already covers
+it; the real gate is `new-target/LOGIC-TARGET-FILE-TREE.md` §4/§8 plus the S13 phase
+gate. See "Owner decisions" at the top of this file.
 
 **S13 judgement (phase gate, 2026-08-01) — unchanged and now confirmed by the
 complete graph.** All seven areas exist and no child owns recipe editing, so this
 is a genuine structural gap rather than an artefact of an unfinished phase. It
-needs an owner-approved `plan.json` addition and cannot be closed by an agent.
-Raised with the owner alongside D28. Not urgent while there is no UI: recipes can
-still be seeded, and HPP costs whatever the seed says.
+needs an owner-approved addition and cannot be closed by an agent. Raised with the
+owner alongside D28. Not urgent while there is no UI: recipes can still be seeded,
+and HPP costs whatever the seed says.
+
+**OWNER DECISION 2026-08-01 — AUTHORIZED**, to be built with the screen that needs
+it (P5), not before. Recorded in `roadmap.md` under P5. The authorizing edit is to
+`new-target/LOGIC-TARGET-FILE-TREE.md`, NOT to `plan.json` — this entry said
+`plan.json` twice above and was wrong both times.
 
 ---
 
-## D19 — HPP rounds three times over the same figures · `scheduled`
+## D19 — HPP rounds three times over the same figures · `accepted` (revised 2026-08-01, with D11)
 
 **Found:** P3 S5, reading the domain's costing math.
 
@@ -451,9 +535,16 @@ the selling price yields a negative percentage with no label saying "loss-making
 
 **Revisit at:** the same moment as D11.
 
+**REVISED 2026-08-01 — `accepted`, for the same reason as D11** (this entry always
+said "revisit at the same moment as D11"). Triple rounding stays. The figures are
+correct to within a fraction of a rupiah and cash is unaffected. The one thing worth
+preserving from this entry: `calculateGrossMarginPercentage` rounds without the
+`Number.EPSILON` nudge that `roundMoney` uses, so one module rounds two ways — if
+any future slice legitimately touches `finance.ts`, make those consistent then.
+
 ---
 
-## D20 — Historical dashboard COGS needs movement-to-menu attribution · `scheduled`
+## D20 — Historical dashboard COGS needs movement-to-menu attribution · `scheduled` (DS-C, new child — no domain rewrite)
 
 **Found:** P3 S5, from the scout's sweep for HPP consumers. **Slice 11.**
 
@@ -504,7 +595,7 @@ not a hole at reversal time.
 
 ---
 
-## D22 — A seeded `adjustment-in` can still suppress a real reversal · `scheduled`
+## D22 — A seeded `adjustment-in` can still suppress a real reversal · `accepted` (carrier slice dropped 2026-08-01)
 
 **Found:** P3 S5, while building `stock-reversal`.
 
@@ -682,6 +773,12 @@ progression path.
 missing button becomes concrete — nothing in P4 or P5 depends on it. The one thing
 that must not happen is a later agent quietly widening `order-read` or
 `order-submission` to cover it.
+
+**OWNER DECISION 2026-08-01 — AUTHORIZED.** Scheduled as `roadmap.md` slice DS-B.
+The three constraints above stand unchanged. **Correction to the paragraph above:
+this needs no `plan.json` line** — the allow glob already covers a new child, and
+the authorizing edit is to `new-target/LOGIC-TARGET-FILE-TREE.md` §4/§8, as its own
+labelled first commit inside DS-B.
 
 ---
 
