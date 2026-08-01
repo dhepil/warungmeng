@@ -23,8 +23,9 @@ Status: `open` — live, undecided · `accepted` — deliberate, not planned to 
 The owner decided every open item in one sitting, then **revised two of those
 decisions the same day** after the cost of the first version became clear. What is
 written here is the FINAL state. **Settled — do not re-litigate, do not ask again.**
-Nothing here has been BUILT yet; these decisions schedule work, they do not perform
-it (verify with `git diff --name-only` against the recording commits).
+The table is live: resolved rows name their implementation commits, while scheduled
+rows are still decisions rather than completed work. The original decision-recording
+commits scheduled work only; later PD commits perform it.
 
 | # | Decision | Result |
 |---|---|---|
@@ -40,7 +41,7 @@ it (verify with `git diff --name-only` against the recording commits).
 | D22 | Dedicated reversal type — lost its carrier slice, see below | `accepted` |
 | D25 | Warung Meng is **one outlet**. Closed as deliberate | `accepted`, closed |
 | D27 | Not a decision — resolves when P4 storefront checkout lands | `open` |
-| D28 | **Forward order progression authorized** — new child | `scheduled` |
+| D28 | **Forward order progression authorized** — new child | `resolved` — 3b12f3b, 1493d9f |
 
 ### The revision, and why it matters more than the original decision
 
@@ -627,79 +628,6 @@ a React ref remains only a responsiveness guard, never the durability mechanism.
 
 ---
 
-## D28 — Forward order status progression has no target logic child · `scheduled`
-
-**Found:** P3 S7, while mapping SOURCE Order detail against the target Orders tree.
-
-SOURCE Admin advances orders through
-`new → accepted → preparing → ready → completed` via the repository's authoritative
-`updated | not-found | invalid-transition` write. Cancellation is a different path
-and correctly owns slice 8's atomic workflow. The target logic tree, however, names
-only `order-read`, `order-submission`, and `order-cancellation`; there is no planned
-file/capability for ordinary forward progression.
-
-S7 did not smuggle mutation into `order-read` and did not widen submission into a
-lifecycle manager. Doing either would make the capability name false and hide a
-real structural omission.
-
-**What it costs to leave:** a later Admin Orders gate can read and cancel an order
-but has no authorized headless capability for accept/prepare/ready/complete.
-
-**Revisit at:** P3 slice 13 phase gate, when the complete Admin capability graph can
-be judged. If the owner authorizes a new planned child/file, its store mutation must
-preserve the SOURCE authoritative outcome and reuse the domain transition machine;
-never add the file by bypassing `plan.json`.
-
-**S13 judgement (phase gate, 2026-08-01) — confirmed as a real gap. OWNER DECISION
-NEEDED, and this is the more consequential of the two.**
-
-The complete graph can now be judged, and it confirms the omission rather than
-resolving it. LOGIC §4 names exactly three Orders children (`order-read`,
-`order-submission`, `order-cancellation`) and §8 gives forward progression no
-capability — re-read at S13, so this is the target tree's own gap, not an artifact
-of how we ported it. The phase gate asserts that requirement graph verbatim, so the
-gap is now *enforced*: adding a forward-progression capability by editing an
-existing child would fail the gate, which is the intended outcome.
-
-`OrdersStorePort` has no door for it either, and that is also correct — S8 removed
-SOURCE's `updateStatus(orderId, status)` bypass because it accepted `"cancelled"`
-and could flip a paid order outside any transaction. The bypass was worse than the
-gap.
-
-**What this means in practice.** The ported Admin runtime can create an order,
-read it, and cancel it — but cannot move one from `new` to `accepted` to
-`preparing` to `ready` to `completed`. SOURCE could. Whoever runs the kitchen
-would have no way to advance a ticket. Everything needed already exists: the
-domain owns the transition machine, and the SOURCE repository's authoritative
-`updated | not-found | invalid-transition` write is the shape to reuse.
-
-**What the owner is being asked.** Whether to authorize one new planned child —
-most likely `engines/orders/children/order-progression/` with its child and test
-file — added to `plan.json` with approval. Adding it WITH approval is not drift;
-an agent silently editing the plan to match code it already wrote is. It is a
-slice of its own, not an addition to an existing one.
-
-**If authorized, three constraints carry over:** reuse the domain transition
-machine rather than restating the status rules; preserve the store's authoritative
-outcome instead of pre-reading (the rule S6/S7/S8 all settled); and do NOT create
-a general status-setter door — S8 deleted exactly that from SOURCE, where
-`updateStatus(orderId, status)` accepted `"cancelled"` and could bypass the whole
-multi-owner cancellation workflow. Cancellation must stay unreachable from the
-progression path.
-
-**Deferrable without harm until P6**, when the Admin Orders gate is built and the
-missing button becomes concrete — nothing in P4 or P5 depends on it. The one thing
-that must not happen is a later agent quietly widening `order-read` or
-`order-submission` to cover it.
-
-**OWNER DECISION 2026-08-01 — AUTHORIZED.** Scheduled as `roadmap.md` slice DS-B.
-The three constraints above stand unchanged. **Correction to the paragraph above:
-this needs no `plan.json` line** — the allow glob already covers a new child, and
-the authorizing edit is to `new-target/LOGIC-TARGET-FILE-TREE.md` §4/§8, as its own
-labelled first commit inside DS-B.
-
----
-
 ## D29 — Cancellation declares `admin.orders.read` but never calls it · `accepted`
 
 **Found:** P3 S8, writing the cancellation child against LOGIC §8.
@@ -742,8 +670,8 @@ is not inert.
 The question this entry parked for S13 — what `requires` means for a write-first
 child — is answered by the gate itself: **`requires` states what must be RUNNING
 for this child to be safe to publish, not what it calls.** An Orders area whose
-read capability never came up is an Orders area too broken to cancel through,
-whether or not cancellation happens to call it. The gate's exclusion tests
-demonstrate the mechanism directly. If D28's forward-progression child is
-authorized it will use the read capability for real, but that will not change this
-answer.
+read capability never came up is an Orders area too broken to mutate through,
+whether or not a writer happens to call it. DS-B confirms the meaning: progression
+declares the read requirement but deliberately performs no pre-read, leaving the
+store's write as the one authoritative transition judge. The gate's exclusion
+tests enforce both declarations.

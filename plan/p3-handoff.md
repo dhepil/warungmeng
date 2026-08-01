@@ -914,3 +914,51 @@ D18 and D23 were deleted from the register this slice, resolved, per its own
 entries and roadmap notes. D29 stays `accepted`, and its parked question is
 answered by the gate itself: **`requires` states what must be RUNNING for a child
 to be safe to publish, not what the child calls.**
+
+## Decisions locked during PD DS-B (order progression)
+
+- **Authorization preceded implementation.** Commit 3b12f3b changes only
+  `new-target/LOGIC-TARGET-FILE-TREE.md`: §4 adds the progression child/test and §8
+  grants `admin.orders.order-progression` with one read requirement. The existing
+  child/test globs already authorize both files, so `plan.json` was not edited.
+- **The capability id equals the child id.** Both are exactly
+  `admin.orders.order-progression`; this is the S3 default, unlike cancellation's
+  document-mandated `admin.orders.cancel` exception. The S13 gate keeps the new id
+  as a literal rather than importing the contracts constant.
+- **There is no general status setter.** Capability input and the new store method
+  accept a `ForwardOrderStatus` containing only `accepted`, `preparing`, `ready`,
+  and `completed`. `new` and `cancelled` are structurally absent. The child also
+  rejects a runtime `cancelled` value before calling the port, because the closed
+  domain transition machine allows cancellation from every forward status and
+  refunds a paid order. Passing it through would recreate the exact S8 bypass.
+- **The store remains the one judge.** Progression makes one `progressOrder` call
+  and preserves authoritative `updated | not-found | invalid-transition` endings.
+  It performs no get-by-id call and does not restate the transition table. The
+  injected adapter/store applies domain `transitionOrderStatus` to its current row,
+  owns the clock/event id, and commits in the same operation. This keeps the domain
+  machine without creating a read-then-write race or a second judge.
+- **`admin.orders.read` is a liveness requirement, not a call site.** A lifecycle
+  writer is not safe to publish in an Orders area whose read capability failed to
+  start, so §8 and the child both declare the edge. The child deliberately does not
+  resolve or call read; when read is absent the graph excludes progression. This is
+  the concrete DS-B application of D29's settled meaning of `requires`.
+- **Port absence stays active-but-unusable.** With Orders read alive but no injected
+  store, progression remains active and published, emits exactly one diagnostic of
+  its own, and returns a normalized dependency failure for its sole method.
+- **Permanent tests use a probe consumer.** No test calls `createOrderProgression`
+  directly. A probe child requires the exact capability id, while the test store
+  uses the real domain transition machine. The suite covers the full forward chain,
+  no pre-read, invalid transition, not-found, missing port/read, blank id, invalid
+  statuses, cancellation, and thrown storage.
+- **Three mutation checks were load-bearing.** Letting `cancelled` through both
+  runtime gates made the domain-backed store return success and failed exactly the
+  cancellation test; treating authoritative invalid-transition as success failed
+  exactly its test; letting a store exception escape failed exactly its test. The
+  child was restored to SHA-256
+  `8AA70EC3D2EF51F1D6841CAEEAD737B39E0BA781792D487CEA6AC0633232720B` after each.
+  The S13 gate now proves 24 children, six children with requirements, and the new
+  literal edge. Full check: 528 tests.
+- **Status correction to the historical S13 tail.** Its "three unresolved items"
+  paragraph was accurate when written. D10 was resolved by DS-A and D28 is now
+  resolved by DS-B; only D16 remains unresolved from that specific list. Historical
+  reasoning stays in place, while these later sections record the current outcome.
