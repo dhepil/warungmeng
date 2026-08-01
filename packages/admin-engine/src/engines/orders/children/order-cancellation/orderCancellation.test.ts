@@ -127,6 +127,9 @@ function storeOver(seed: {
     submitOrder: async () => {
       throw new Error("submission not used by order-cancellation");
     },
+    progressOrder: async () => {
+      throw new Error("progression not used by order-cancellation");
+    },
     cancelOrder: async (orderId) => {
       if (seed.throwOnCancel === true) {
         throw new Error("orders backend unreachable");

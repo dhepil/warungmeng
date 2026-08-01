@@ -1,9 +1,9 @@
 // packages/admin-engine/src/engines/orders/ordersContracts.ts
 //
 // Stable contracts owned by the Orders area: one injected store, the read and
-// submission capabilities built in S7, and the area's non-domain query/outcome
-// shapes. `Order` and its nested vocabulary come from the domain and are never
-// restated here.
+// submission capabilities built in S7, progression added in PD DS-B, and the
+// area's non-domain query/outcome shapes. `Order` and its nested vocabulary come
+// from the domain and are never restated here.
 //
 // Cancellation arrived in S8 as its own capability and atomic workflow; neither S7
 // child was widened into a multi-owner operation to accommodate it.
@@ -47,9 +47,9 @@ export type OrderSubmissionRecord = Omit<Order, "id">;
  * active cancellation command" while that sibling contradicted it, and the invariant
  * survived only because one screen filtered `"cancelled"` out of its button list. A
  * capability is not allowed to depend on a screen for its correctness, so the door
- * does not exist here. Forward progression (`new → accepted → …`) has no target
- * child at all yet — tech-debt D28, not something to smuggle in through a general
- * status setter.
+ * does not exist here. DS-B adds the separate `progressOrder` door below, whose
+ * target type excludes both `new` and `cancelled`; it can only request one of the
+ * four forward statuses.
  *
  * The store computes the transition itself and answers authoritatively, exactly as
  * Finance's writes do: no child-side pre-read, because a read-then-write is both a
@@ -62,8 +62,35 @@ export interface OrdersStorePort {
     idempotencyKey: string,
     record: OrderSubmissionRecord,
   ): Promise<OrderSubmissionCommit>;
+  progressOrder(
+    orderId: string,
+    nextStatus: ForwardOrderStatus,
+  ): Promise<OrderProgressionCommit>;
   cancelOrder(orderId: string): Promise<OrderCancellationCommit>;
 }
+
+/** The only statuses progression may request. Cancellation is structurally absent. */
+export const FORWARD_ORDER_STATUSES = [
+  "accepted",
+  "preparing",
+  "ready",
+  "completed",
+] as const;
+
+export type ForwardOrderStatus = (typeof FORWARD_ORDER_STATUSES)[number];
+
+/**
+ * The store decides and writes one forward transition against its current row.
+ *
+ * A child-side read would race, so the clock, event id, domain
+ * `transitionOrderStatus` call, and commit belong inside the authoritative store
+ * operation. `invalid-transition` carries the unchanged row so the caller can
+ * report the current status honestly.
+ */
+export type OrderProgressionCommit =
+  | { readonly status: "updated"; readonly order: Order }
+  | { readonly status: "not-found" }
+  | { readonly status: "invalid-transition"; readonly order: Order };
 
 /**
  * What the store reports back from a cancellation attempt.
@@ -152,6 +179,37 @@ export interface OrderSubmission {
 export const ORDER_SUBMISSION_ID = "admin.orders.order-submission";
 export const ORDER_SUBMISSION =
   createCapabilityToken<OrderSubmission>(ORDER_SUBMISSION_ID);
+
+// ─── Progression contracts (child: order-progression) ────────────────────────
+
+export const PROGRESSION_ISSUE = {
+  invalidOrderId: "invalid-order-id",
+  invalidStatus: "invalid-order-progression-status",
+  cancellationForbidden: "order-cancellation-requires-atomic-workflow",
+  notFound: "order-not-found",
+  invalidTransition: "invalid-order-transition",
+  storeFailed: "orders-store-failed",
+  noStore: "no-orders-store",
+} as const;
+
+export interface ProgressOrderInput {
+  readonly orderId: string;
+  readonly nextStatus: ForwardOrderStatus;
+}
+
+export interface OrderProgressionOutcome {
+  readonly order: Order;
+}
+
+export interface OrderProgression {
+  progressOrder(
+    input: ProgressOrderInput,
+  ): Promise<OperationResult<OrderProgressionOutcome>>;
+}
+
+export const ORDER_PROGRESSION_ID = "admin.orders.order-progression";
+export const ORDER_PROGRESSION =
+  createCapabilityToken<OrderProgression>(ORDER_PROGRESSION_ID);
 
 // ─── Cancellation contracts (child: order-cancellation) ───────────────────────
 

@@ -23,7 +23,7 @@
 //
 // Why the assertions below compare ID SETS and not counts: a renamed file keeps
 // the count identical while loading as nothing (the count only moves if a file is
-// deleted outright, which structure already catches). "Expected 23, got 22" also
+// deleted outright, which structure already catches). "Expected 24, got 23" also
 // tells a reader nothing about WHICH child vanished. A set comparison fails with a
 // readable diff naming the missing id, which is the difference between a gate that
 // reports a problem and a gate that reports a number.
@@ -57,7 +57,7 @@ const EXPECTED_ENGINE_IDS = [
 ] as const;
 
 /**
- * All 23 children, by child id — the id of the DEFINITION, which is not always
+ * All 24 children, by child id — the id of the DEFINITION, which is not always
  * the id of the capability it publishes.
  */
 const EXPECTED_CHILD_IDS = [
@@ -77,6 +77,7 @@ const EXPECTED_CHILD_IDS = [
   "admin.menu.menu-editor",
   "admin.menu.variant-management",
   "admin.orders.order-cancellation",
+  "admin.orders.order-progression",
   "admin.orders.order-read",
   "admin.orders.order-submission",
   "admin.pos.cart",
@@ -96,7 +97,7 @@ const EXPECTED_CHILD_IDS = [
  *     LOGIC §8 names that id and the doc is the structural authority. S8 recorded
  *     that publishing under the child id instead failed 16 of 20 tests.
  *   - `admin.orders.order-read` publishes `admin.orders.read`, for the same
- *     reason: §8's five requirement edges name `admin.orders.read`, so the
+ *     reason: §8's Orders and Dashboard edges name `admin.orders.read`, so the
  *     capability has to be that string or dashboard and cancellation resolve
  *     nothing.
  *
@@ -121,6 +122,7 @@ const EXPECTED_CAPABILITY_BY_CHILD: Readonly<Record<string, string>> = {
   "admin.menu.menu-editor": "admin.menu.menu-editor",
   "admin.menu.variant-management": "admin.menu.variant-management",
   "admin.orders.order-cancellation": "admin.orders.cancel",
+  "admin.orders.order-progression": "admin.orders.order-progression",
   "admin.orders.order-read": "admin.orders.read",
   "admin.orders.order-submission": "admin.orders.order-submission",
   "admin.pos.cart": "admin.pos.cart",
@@ -133,7 +135,7 @@ const EXPECTED_CAPABILITY_BY_CHILD: Readonly<Record<string, string>> = {
 /**
  * The LOGIC §8 capability graph, verbatim, including the order the doc lists.
  *
- * Five children have requirements. The other eighteen have none, and that is
+ * Six children have requirements. The other eighteen have none, and that is
  * asserted too — an invented edge is as much a departure from the doc as a
  * missing one, and it would quietly make a child unavailable in a runtime the
  * doc says should work.
@@ -161,6 +163,7 @@ const EXPECTED_REQUIREMENTS: Readonly<Record<string, readonly string[]>> = {
     "admin.finance.refund-projection",
     "admin.atomic-operation",
   ],
+  "admin.orders.order-progression": ["admin.orders.read"],
   "admin.pos.checkout": [
     "admin.pos.session",
     "admin.pos.cart",
@@ -317,10 +320,10 @@ describe("Admin discovery finds every planned engine and child on disk", () => {
     ]);
   });
 
-  it("discovers exactly the 23 planned children, by id and not by count", () => {
+  it("discovers exactly the 24 planned children, by id and not by count", () => {
     const discovered = discoverAdminLogic();
 
-    // A set comparison, not `toHaveLength(23)`. A child file renamed to another
+    // A set comparison, not `toHaveLength(24)`. A child file renamed to another
     // allowed glob (`fooChild.ts` → `foo.test.ts`) keeps structure green and
     // loads as NOTHING; the count would move only on an outright deletion, which
     // structure already catches. This assertion names the child that vanished.
@@ -405,7 +408,7 @@ describe("every capability id matches LOGIC §8 verbatim", () => {
 // ─── 3. The requirement graph ────────────────────────────────────────────────
 
 describe("the requirement graph is exactly LOGIC §8", () => {
-  it("the five children with requirements declare exactly the doc's edges, in order", () => {
+  it("the six children with requirements declare exactly the doc's edges, in order", () => {
     const discovered = discoverAdminLogic();
 
     for (const [childId, expected] of Object.entries(EXPECTED_REQUIREMENTS)) {
@@ -483,7 +486,7 @@ describe("a fully composed runtime is healthy and silent", () => {
     runtime.dispose();
   });
 
-  it("publishes all 23 area capabilities plus the republished atomic boundary", () => {
+  it("publishes all 24 area capabilities plus the republished atomic boundary", () => {
     const runtime = composeAdmin();
 
     expect(sorted(runtime.getSnapshot().runtime.capabilities)).toEqual(
@@ -517,7 +520,7 @@ describe("a fully composed runtime is healthy and silent", () => {
     const runtime = composeAdmin();
     const order = runtime.getSnapshot().runtime.initializationOrder;
 
-    // 23 area children plus the atomic bridge.
+    // 24 area children plus the atomic bridge.
     expect(order).toHaveLength(EXPECTED_CHILD_IDS.length + 1);
 
     const positionOf = new Map<string, number>(
