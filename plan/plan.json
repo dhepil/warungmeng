@@ -1,7 +1,7 @@
 {
   "$comment": "SINGLE SOURCE OF TRUTH for structure + import boundaries. Transcribed from new-target/*.md. Do NOT edit to make a build pass — new-target wins always. Checkers read this file; agents do not rely on memory.",
   "version": 1,
-  "activePhase": "P4-storefront-engine",
+  "activePhase": "P3-admin-engine",
   "phases": [
     {
       "id": "P1-domain",
@@ -110,6 +110,8 @@
       "allow": [
         "packages/admin-engine/src/engines/*/*Engine.ts",
         "packages/admin-engine/src/engines/*/*Contracts.ts",
+        "packages/admin-engine/src/engines/*/*Operations.ts",
+        "packages/admin-engine/src/engines/*/*Operations.test.ts",
         "packages/admin-engine/src/engines/*/children/**/*Child.ts",
         "packages/admin-engine/src/engines/*/children/**/*.test.ts",
         "packages/admin-engine/src/engines/orders/children/order-cancellation/cancelOrderAtomically.ts",
